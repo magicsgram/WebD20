@@ -88,6 +88,7 @@ const RUNTIME_CONFIG = {
       density: 2.1,
     },
     world: {
+      gravityY: -12.0,
       wallThickness: 0.5,
       wallHalfHeight: 60,
       wallRestitution: 0.34,
@@ -97,12 +98,12 @@ const RUNTIME_CONFIG = {
       wallSegments: 64,
     },
     launch: {
-      strengthBase: 10.8,
-      strengthRandom: 5.2,
+      dropHeightBase: 6.0,
+      dropHeightRandom: 1.2,
+      dropHeightStep: 0.18,
+      boundaryInset: 1.35,
       impulseOffset: 1,
-      torqueStrength: 6,
-      upwardBase: 20.0,
-      upwardRandom: 5.0,
+      torqueStrength: 10,
     },
   },
 };
@@ -220,6 +221,27 @@ function getTrayScaleForDiceCount(count) {
 
 function getTrayHalfSizeForDiceCount(count) {
   return TRAY_SCALE.baseHalfSize * getTrayScaleForDiceCount(count);
+}
+
+function getRandomTorqueImpulse(baseStrength, strengthJitter = 0) {
+  let x = (Math.random() * 2) - 1;
+  let y = (Math.random() * 2) - 1;
+  let z = (Math.random() * 2) - 1;
+  let length = Math.hypot(x, y, z);
+
+  if (length < 1e-4) {
+    x = 1;
+    y = 0;
+    z = 0;
+    length = 1;
+  }
+
+  const strength = Math.max(0.1, baseStrength + ((Math.random() * 2) - 1) * strengthJitter);
+  return {
+    x: (x / length) * strength,
+    y: (y / length) * strength,
+    z: (z / length) * strength,
+  };
 }
 
 // ── Dice count selector ──────────────────────────────────────────────────────
@@ -371,7 +393,7 @@ let relandAttempts = 0;
 
 // ── Physics world builder ────────────────────────────────────────────────────
 function buildPhysicsWorld(halfSize) {
-  const w = new RAPIER.World({ x: 0, y: -9.81, z: 0 });
+  const w = new RAPIER.World({ x: 0, y: PHYS.world.gravityY, z: 0 });
 
   const wallThickness = PHYS.world.wallThickness;
   const wallHalfHeight = PHYS.world.wallHalfHeight;
@@ -409,13 +431,23 @@ function buildPhysicsWorld(halfSize) {
 }
 
 // ── Spawn a die into the physics world ───────────────────────────────────────
-function spawnDie(physWorld, dieObj, index, total) {
-  const cols = Math.ceil(Math.sqrt(total));
-  const row  = Math.floor(index / cols);
-  const col  = index % cols;
-  const x = (col - (cols - 1) / 2) * 1.3 + (Math.random() - 0.5) * 0.4;
-  const z = (row - Math.floor(total / cols) / 2) * 1.3 + (Math.random() - 0.5) * 0.4;
-  const y = 1.05 + index * 0.14;
+function getRandomDropPoint(trayHalfSize, inset) {
+  const usableRadius = Math.max(0.75, trayHalfSize - inset);
+  const angle = Math.random() * Math.PI * 2;
+  const radius = Math.sqrt(Math.random()) * usableRadius;
+
+  return {
+    x: Math.cos(angle) * radius,
+    z: Math.sin(angle) * radius,
+  };
+}
+
+function spawnDie(physWorld, dieObj, index, trayHalfSize) {
+  const { x, z } = getRandomDropPoint(
+    trayHalfSize,
+    PHYS.launch.boundaryInset + (dieObj.physRadius * 0.9)
+  );
+  const y = PHYS.launch.dropHeightBase + (Math.random() * PHYS.launch.dropHeightRandom) + (index * PHYS.launch.dropHeightStep);
 
   const bodyDesc = RAPIER.RigidBodyDesc.dynamic()
     .setTranslation(x, y, z)
@@ -451,22 +483,9 @@ function spawnDie(physWorld, dieObj, index, total) {
     .setDensity(dieDensity);
   physWorld.createCollider(colliderDesc, body);
 
-  const launchAngle = Math.random() * Math.PI * 2;
-  const launchStrength = PHYS.launch.strengthBase + Math.random() * PHYS.launch.strengthRandom;
   const launchImpulseOffset = PHYS.launch.impulseOffset;
   const launchTorqueStrength = PHYS.launch.torqueStrength;
-  const launchUpwardBase = PHYS.launch.upwardBase;
-  const launchUpwardRandom = PHYS.launch.upwardRandom;
-  body.applyImpulse({
-    x: Math.cos(launchAngle) * launchStrength,
-    y: launchUpwardBase + Math.random() * launchUpwardRandom,
-    z: Math.sin(launchAngle) * launchStrength,
-  }, true);
-  body.applyTorqueImpulse({
-    x: (Math.random() - 0.5) * launchImpulseOffset + launchTorqueStrength,
-    y: (Math.random() - 0.5) * launchImpulseOffset + launchTorqueStrength,
-    z: (Math.random() - 0.5) * launchImpulseOffset + launchTorqueStrength,
-  }, true);
+  body.applyTorqueImpulse(getRandomTorqueImpulse(launchTorqueStrength, launchImpulseOffset), true);
 
   return body;
 }
@@ -548,11 +567,7 @@ function relaunchInvalidDice(invalidEntries) {
       y: upwardImpulse,
       z: Math.sin(heading) * lateralImpulse,
     }, true);
-    body.applyTorqueImpulse({
-      x: (Math.random() - 0.5) * RELAND.torqueImpulse,
-      y: (Math.random() - 0.5) * RELAND.torqueImpulse,
-      z: (Math.random() - 0.5) * RELAND.torqueImpulse,
-    }, true);
+    body.applyTorqueImpulse(getRandomTorqueImpulse(RELAND.torqueImpulse), true);
   });
 
   stepCount = 0;
@@ -608,7 +623,7 @@ function startRoll() {
 
   selectedDice.forEach((sides, i) => {
     const dieObj = createDie(sides, i, dieColors[i]);
-    const body   = spawnDie(world, dieObj, i, selectedDice.length);
+    const body   = spawnDie(world, dieObj, i, trayHalfSize);
     scene.add(dieObj.mesh);
     entities.push({ body, mesh: dieObj.mesh, faceNormals: dieObj.faceNormals, sides, physRadius: dieObj.physRadius });
   });
