@@ -22,12 +22,30 @@ export function initScene(container) {
   const scene = new THREE.Scene();
   scene.background = new THREE.Color(0x000000);
 
+  const trayMaterial = new THREE.MeshStandardMaterial({ color: 0x2a2a2a, roughness: 0.92, metalness: 0.05 });
+  const trayMesh = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), trayMaterial);
+  trayMesh.rotation.x = -Math.PI / 2;
+  trayMesh.position.y = 0.001;
+  scene.add(trayMesh);
+
+  const d6Height = 0.68 * 1.72;
+  const visibleWallHeight = d6Height * 2;
+  const visibleWallThickness = 0.24;
+  const wallMaterial = new THREE.MeshStandardMaterial({ color: 0x3a3a3a, roughness: 0.9, metalness: 0.04 });
+  const wallXPositive = new THREE.Mesh(new THREE.BoxGeometry(1, visibleWallHeight, 1), wallMaterial);
+  const wallXNegative = new THREE.Mesh(new THREE.BoxGeometry(1, visibleWallHeight, 1), wallMaterial);
+  const wallZPositive = new THREE.Mesh(new THREE.BoxGeometry(1, visibleWallHeight, 1), wallMaterial);
+  const wallZNegative = new THREE.Mesh(new THREE.BoxGeometry(1, visibleWallHeight, 1), wallMaterial);
+  scene.add(wallXPositive, wallXNegative, wallZPositive, wallZNegative);
+
   // ── Camera ───────────────────────────────────────────────────────────────────
   const camera = new THREE.PerspectiveCamera(52, w / h, 0.1, 140);
   let trayHalfSize = 6.5;
-  const trayTarget = new THREE.Vector3(0, 0, 0);
+  const trayTargetYOffset = -0.45;
+  const trayTarget = new THREE.Vector3(0, trayTargetYOffset, 0);
   const baseDirection = new THREE.Vector3(0, 16, 10).normalize();
   const fitDistanceEpsilon = 0.998;
+  const fitDistanceMargin = 1.07;
   const fitCorners = [
     new THREE.Vector3(),
     new THREE.Vector3(),
@@ -42,6 +60,28 @@ export function initScene(container) {
     fitCorners[1].set(-hs, 0, hs);
     fitCorners[2].set(hs, 0, -hs);
     fitCorners[3].set(hs, 0, hs);
+  }
+
+  function updateTrayMeshSize() {
+    const size = trayHalfSize * 2;
+    trayMesh.scale.set(size, size, 1);
+  }
+
+  function updateWallMeshes() {
+    const span = trayHalfSize * 2;
+    const y = visibleWallHeight * 0.5;
+
+    wallXPositive.scale.set(visibleWallThickness, 1, span);
+    wallXPositive.position.set(trayHalfSize, y, 0);
+
+    wallXNegative.scale.set(visibleWallThickness, 1, span);
+    wallXNegative.position.set(-trayHalfSize, y, 0);
+
+    wallZPositive.scale.set(span, 1, visibleWallThickness);
+    wallZPositive.position.set(0, y, trayHalfSize);
+
+    wallZNegative.scale.set(span, 1, visibleWallThickness);
+    wallZNegative.position.set(0, y, -trayHalfSize);
   }
 
   function placeCameraAtDistance(distance) {
@@ -82,10 +122,12 @@ export function initScene(container) {
       }
     }
 
-    placeCameraAtDistance(far);
+    placeCameraAtDistance(far * fitDistanceMargin);
   }
 
   updateCameraToFitTray(w, h);
+  updateTrayMeshSize();
+  updateWallMeshes();
 
   // ── Lights ────────────────────────────────────────────────────────────────────
   scene.add(new THREE.AmbientLight(0xffffff, 0.85));
@@ -108,6 +150,8 @@ export function initScene(container) {
 
   function setTrayHalfSize(nextHalfSize) {
     trayHalfSize = Math.max(2, Number(nextHalfSize) || 6.5);
+    updateTrayMeshSize();
+    updateWallMeshes();
     resizeScene();
   }
 
