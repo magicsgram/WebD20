@@ -39,9 +39,6 @@ const COLOR_PALETTE = [
 let dieColors = [];
 let popupTimer = null;
 let rollInputLocked = false;
-let shakeMotionAttached = false;
-let shakeLastMagnitude = 0;
-let shakeLastTriggerAt = 0;
 
 function isCanvasFullscreen() {
   return document.fullscreenElement === canvasContainer;
@@ -61,10 +58,6 @@ function canTriggerRoll() {
   return !rollInputLocked && !simActive;
 }
 
-function isMobileMode() {
-  return window.matchMedia('(max-width: 720px)').matches;
-}
-
 function tryStartRoll({ forceRestart = false } = {}) {
   if (forceRestart && simActive) {
     startRoll();
@@ -74,60 +67,6 @@ function tryStartRoll({ forceRestart = false } = {}) {
   if (!canTriggerRoll()) return false;
   startRoll();
   return true;
-}
-
-function handleDeviceMotion(event) {
-  if (!isMobileMode() || !canTriggerRoll()) return;
-
-  const acceleration = event.accelerationIncludingGravity ?? event.acceleration;
-  if (!acceleration) return;
-
-  const x = acceleration.x ?? 0;
-  const y = acceleration.y ?? 0;
-  const z = acceleration.z ?? 0;
-  const magnitude = Math.sqrt(x * x + y * y + z * z);
-  const delta = Math.abs(magnitude - shakeLastMagnitude);
-  shakeLastMagnitude = magnitude;
-
-  const SHAKE_DELTA_THRESHOLD = 12;
-  const SHAKE_COOLDOWN_MS = 850;
-  const now = Date.now();
-
-  if (delta > SHAKE_DELTA_THRESHOLD && now - shakeLastTriggerAt > SHAKE_COOLDOWN_MS) {
-    shakeLastTriggerAt = now;
-    startRoll();
-  }
-}
-
-function enableShakeToRoll() {
-  if (shakeMotionAttached || typeof window.DeviceMotionEvent === 'undefined') return;
-
-  const attachMotionListener = () => {
-    if (shakeMotionAttached) return;
-    window.addEventListener('devicemotion', handleDeviceMotion, { passive: true });
-    shakeMotionAttached = true;
-  };
-
-  if (typeof window.DeviceMotionEvent.requestPermission === 'function') {
-    const requestPermission = async () => {
-      try {
-        const state = await window.DeviceMotionEvent.requestPermission();
-        if (state === 'granted') attachMotionListener();
-      } catch {
-      }
-    };
-
-    const unlockFromGesture = () => {
-      requestPermission();
-      canvasContainer.removeEventListener('click', unlockFromGesture);
-      canvasContainer.removeEventListener('touchstart', unlockFromGesture);
-    };
-
-    canvasContainer.addEventListener('click', unlockFromGesture, { passive: true });
-    canvasContainer.addEventListener('touchstart', unlockFromGesture, { passive: true });
-  } else {
-    attachMotionListener();
-  }
 }
 
 function hideCanvasResultPopup() {
@@ -250,7 +189,6 @@ diceCountSelect.addEventListener('change', renderDiceSelectors);
 setAllD6Btn.addEventListener('click', () => setAllDiceTypes(6));
 setAllD20Btn.addEventListener('click', () => setAllDiceTypes(20));
 renderDiceSelectors();
-enableShakeToRoll();
 
 setRollButtonState(false, 'Roll');
 
