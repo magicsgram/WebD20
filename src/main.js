@@ -316,7 +316,7 @@ const RELAND_TILT_MAX_DEG = 30;
 const DICE_PHYSICS = {
   linearDamping: 0.0,
   angularDamping: 0.0,
-  friction: 0.3,
+  friction: 0.18,
   restitution: 0.14,
   density: 2.1,
 };
@@ -328,14 +328,14 @@ function buildPhysicsWorld(halfSize) {
   const wallThickness = 0.5;
   const wallHalfHeight = 60;
   const wallRestitution = 0.34;
-  const wallFriction = 0.18;
+  const wallFriction = 0.10;
   const trayRadius = halfSize;
   const wallSegments = 64;
 
   // Floor slab
   const fb = w.createRigidBody(RAPIER.RigidBodyDesc.fixed().setTranslation(0, -0.05, 0));
   w.createCollider(
-    RAPIER.ColliderDesc.cuboid(trayRadius, 0.1, trayRadius).setRestitution(0.12).setFriction(0.82),
+    RAPIER.ColliderDesc.cuboid(trayRadius, 0.1, trayRadius).setRestitution(0.12).setFriction(0.54),
     fb
   );
 
@@ -474,7 +474,9 @@ function relaunchInvalidDice(invalidEntries) {
   triggerRelandFlash();
   const upwardImpulse = RELAND_UPWARD_IMPULSE_BASE + ((relandAttempts - 1) * RELAND_UPWARD_IMPULSE_STEP);
 
-  invalidEntries.forEach(({ entity }) => {
+  const relandTargets = invalidEntries.map((entry) => entry.entity);
+
+  relandTargets.forEach((entity) => {
     const { body, physRadius } = entity;
     const t = body.translation();
     const lift = Math.max(RELAND_VERTICAL_LIFT, physRadius * 0.45);
