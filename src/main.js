@@ -23,17 +23,12 @@ fullscreenBtn.type = 'button';
 fullscreenBtn.className = 'canvas-overlay-btn canvas-fs-btn';
 fullscreenBtn.textContent = 'Fullscreen';
 
-const canvasRollBtn = document.createElement('button');
-canvasRollBtn.type = 'button';
-canvasRollBtn.className = 'canvas-overlay-btn canvas-roll-btn';
-canvasRollBtn.textContent = 'Roll';
-
 const canvasResultPopup = document.createElement('div');
 canvasResultPopup.className = 'canvas-result-popup';
 
 const layoutEl = document.querySelector('.layout');
 layoutEl.append(panelToggleBtn);
-canvasContainer.append(fullscreenBtn, canvasRollBtn, canvasResultPopup);
+canvasContainer.append(fullscreenBtn, canvasResultPopup);
 
 const COLOR_PALETTE = [
   '#a6cee3', '#1f78b4', '#b2df8a', '#33a02c',
@@ -43,6 +38,10 @@ const COLOR_PALETTE = [
 
 let dieColors = [];
 let popupTimer = null;
+let rollInputLocked = false;
+let shakeMotionAttached = false;
+let shakeLastMagnitude = 0;
+let shakeLastTriggerAt = 0;
 
 function isCanvasFullscreen() {
   return document.fullscreenElement === canvasContainer;
@@ -54,8 +53,81 @@ function setPanelHidden(hidden) {
 }
 
 function setRollButtonState(disabled, text) {
-  canvasRollBtn.disabled = disabled;
-  canvasRollBtn.textContent = text;
+  rollInputLocked = disabled;
+  canvasContainer.classList.toggle('roll-disabled', disabled);
+}
+
+function canTriggerRoll() {
+  return !rollInputLocked && !simActive;
+}
+
+function isMobileMode() {
+  return window.matchMedia('(max-width: 720px)').matches;
+}
+
+function tryStartRoll({ forceRestart = false } = {}) {
+  if (forceRestart && simActive) {
+    startRoll();
+    return true;
+  }
+
+  if (!canTriggerRoll()) return false;
+  startRoll();
+  return true;
+}
+
+function handleDeviceMotion(event) {
+  if (!isMobileMode() || !canTriggerRoll()) return;
+
+  const acceleration = event.accelerationIncludingGravity ?? event.acceleration;
+  if (!acceleration) return;
+
+  const x = acceleration.x ?? 0;
+  const y = acceleration.y ?? 0;
+  const z = acceleration.z ?? 0;
+  const magnitude = Math.sqrt(x * x + y * y + z * z);
+  const delta = Math.abs(magnitude - shakeLastMagnitude);
+  shakeLastMagnitude = magnitude;
+
+  const SHAKE_DELTA_THRESHOLD = 12;
+  const SHAKE_COOLDOWN_MS = 850;
+  const now = Date.now();
+
+  if (delta > SHAKE_DELTA_THRESHOLD && now - shakeLastTriggerAt > SHAKE_COOLDOWN_MS) {
+    shakeLastTriggerAt = now;
+    startRoll();
+  }
+}
+
+function enableShakeToRoll() {
+  if (shakeMotionAttached || typeof window.DeviceMotionEvent === 'undefined') return;
+
+  const attachMotionListener = () => {
+    if (shakeMotionAttached) return;
+    window.addEventListener('devicemotion', handleDeviceMotion, { passive: true });
+    shakeMotionAttached = true;
+  };
+
+  if (typeof window.DeviceMotionEvent.requestPermission === 'function') {
+    const requestPermission = async () => {
+      try {
+        const state = await window.DeviceMotionEvent.requestPermission();
+        if (state === 'granted') attachMotionListener();
+      } catch {
+      }
+    };
+
+    const unlockFromGesture = () => {
+      requestPermission();
+      canvasContainer.removeEventListener('click', unlockFromGesture);
+      canvasContainer.removeEventListener('touchstart', unlockFromGesture);
+    };
+
+    canvasContainer.addEventListener('click', unlockFromGesture, { passive: true });
+    canvasContainer.addEventListener('touchstart', unlockFromGesture, { passive: true });
+  } else {
+    attachMotionListener();
+  }
 }
 
 function hideCanvasResultPopup() {
@@ -178,6 +250,7 @@ diceCountSelect.addEventListener('change', renderDiceSelectors);
 setAllD6Btn.addEventListener('click', () => setAllDiceTypes(6));
 setAllD20Btn.addEventListener('click', () => setAllDiceTypes(20));
 renderDiceSelectors();
+enableShakeToRoll();
 
 setRollButtonState(false, 'Roll');
 
@@ -192,8 +265,11 @@ fullscreenBtn.addEventListener('click', async () => {
   }
 });
 
-canvasRollBtn.addEventListener('click', () => {
-  if (!canvasRollBtn.disabled) startRoll();
+canvasContainer.addEventListener('click', (event) => {
+  const target = event.target;
+  if (!(target instanceof Element)) return;
+  if (target.closest('.canvas-overlay-btn') || target.closest('.canvas-result-popup')) return;
+  tryStartRoll({ forceRestart: true });
 });
 
 document.addEventListener('fullscreenchange', () => {
@@ -387,7 +463,7 @@ function startRoll() {
 }
 
 window.addEventListener('keydown', (event) => {
-  if (event.code !== 'Space' || event.repeat || canvasRollBtn.disabled) return;
+  if (event.code !== 'Space' || event.repeat || !canTriggerRoll()) return;
 
   const active = document.activeElement;
   const tag = active?.tagName;
