@@ -108,6 +108,21 @@ function shuffledColorsForCount(count) {
   return colors.slice(0, count);
 }
 
+function getTrayScaleForDiceCount(count) {
+  const minDice = 2;
+  const maxDice = 20;
+  const minScale = 0.7;
+  const maxScale = 1.15;
+  const clamped = Math.min(maxDice, Math.max(minDice, count));
+  const progress = (clamped - minDice) / (maxDice - minDice);
+  return minScale + (maxScale - minScale) * progress;
+}
+
+function getTrayHalfSizeForDiceCount(count) {
+  const baseTrayHalfSize = 6.5;
+  return baseTrayHalfSize * getTrayScaleForDiceCount(count);
+}
+
 // ── Dice count selector ──────────────────────────────────────────────────────
 for (let i = 1; i <= 20; i++) {
   const o = document.createElement('option');
@@ -185,7 +200,6 @@ function setAllDiceTypes(value) {
   });
 }
 
-diceCountSelect.addEventListener('change', renderDiceSelectors);
 setAllD6Btn.addEventListener('click', () => setAllDiceTypes(6));
 setAllD20Btn.addEventListener('click', () => setAllDiceTypes(20));
 renderDiceSelectors();
@@ -225,7 +239,13 @@ panelToggleBtn.addEventListener('click', () => {
 });
 
 // ── Three.js scene ───────────────────────────────────────────────────────────
-const { scene, camera, renderer } = initScene(canvasContainer);
+const { scene, camera, renderer, setTrayHalfSize } = initScene(canvasContainer);
+
+diceCountSelect.addEventListener('change', () => {
+  renderDiceSelectors();
+  setTrayHalfSize(getTrayHalfSizeForDiceCount(Number(diceCountSelect.value)));
+});
+setTrayHalfSize(getTrayHalfSizeForDiceCount(Number(diceCountSelect.value)));
 
 // ── Simulation state ─────────────────────────────────────────────────────────
 let world     = null;
@@ -233,7 +253,7 @@ let entities  = []; // { body, mesh, faceNormals, sides }
 let simActive = false;
 let stepCount = 0;
 let stableFrames = 0;
-const MAX_STEPS = 480;
+const MAX_STEPS = 650;
 const MIN_STABLE_FRAMES = 24;
 const MIN_ROLL_STEPS = 70;
 const LINEAR_STOP_SPEED = 0.08;
@@ -251,12 +271,11 @@ const DICE_PHYSICS = {
 };
 
 // ── Physics world builder ────────────────────────────────────────────────────
-function buildPhysicsWorld() {
+function buildPhysicsWorld(halfSize) {
   const w = new RAPIER.World({ x: 0, y: -9.81, z: 0 });
 
   const wallThickness = 0.45;
   const wallHalfHeight = 60;
-  const halfSize = 6.5;
   const wallRestitution = 0.34;
   const wallFriction = 0.18;
 
@@ -291,7 +310,7 @@ function spawnDie(physWorld, dieObj, index, total) {
   const col  = index % cols;
   const x = (col - (cols - 1) / 2) * 1.3 + (Math.random() - 0.5) * 0.4;
   const z = (row - Math.floor(total / cols) / 2) * 1.3 + (Math.random() - 0.5) * 0.4;
-  const y = 3.5 + index * 0.28;
+  const y = 1.05 + index * 0.14;
 
   const bodyDesc = RAPIER.RigidBodyDesc.dynamic()
     .setTranslation(x, y, z)
@@ -318,21 +337,30 @@ function spawnDie(physWorld, dieObj, index, total) {
       RAPIER.ColliderDesc.convexHull(dieObj.physHullPositions) ??
       RAPIER.ColliderDesc.ball(dieObj.physRadius * 0.88);
   }
+  const dieDensity = dieObj.sides === 20
+    ? DICE_PHYSICS.density * 0.78
+    : DICE_PHYSICS.density;
   colliderDesc
     .setRestitution(DICE_PHYSICS.restitution)
     .setFriction(DICE_PHYSICS.friction)
-    .setDensity(DICE_PHYSICS.density);
+    .setDensity(dieDensity);
   physWorld.createCollider(colliderDesc, body);
 
+  const launchAngle = Math.random() * Math.PI * 2;
+  const launchStrength = 10.8 + Math.random() * 3.2;
+  const launchImpulseOffset = 3;
+  const launchTorqueStrength = 10;
+  const launchUpwardBase = 15.0;
+  const launchUpwardRandom = 5.0;
   body.applyImpulse({
-    x: (Math.random() - 0.5) * 6.8,
-    y: 3.4 + Math.random() * 3.0,
-    z: (Math.random() - 0.5) * 6.8,
+    x: Math.cos(launchAngle) * launchStrength,
+    y: launchUpwardBase + Math.random() * launchUpwardRandom,
+    z: Math.sin(launchAngle) * launchStrength,
   }, true);
   body.applyTorqueImpulse({
-    x: (Math.random() - 0.5) * 16,
-    y: (Math.random() - 0.5) * 16,
-    z: (Math.random() - 0.5) * 16,
+    x: (Math.random() - 0.5) * launchImpulseOffset + launchTorqueStrength,
+    y: (Math.random() - 0.5) * launchImpulseOffset + launchTorqueStrength,
+    z: (Math.random() - 0.5) * launchImpulseOffset + launchTorqueStrength,
   }, true);
 
   return body;
@@ -386,7 +414,10 @@ function startRoll() {
     document.querySelectorAll('select[data-die-type="true"]')
   ).map(el => Number(el.value));
 
-  world      = buildPhysicsWorld();
+  const trayHalfSize = getTrayHalfSizeForDiceCount(selectedDice.length);
+  setTrayHalfSize(trayHalfSize);
+
+  world      = buildPhysicsWorld(trayHalfSize);
   stepCount  = 0;
   stableFrames = 0;
   simActive  = true;
@@ -401,7 +432,8 @@ function startRoll() {
 }
 
 window.addEventListener('keydown', (event) => {
-  if (event.code !== 'Space' || event.repeat) return;
+  const isSpaceKey = event.code === 'Space' || event.key === ' ' || event.key === 'Spacebar';
+  if (!isSpaceKey || event.repeat) return;
 
   const active = document.activeElement;
   const tag = active?.tagName;
@@ -409,7 +441,7 @@ window.addEventListener('keydown', (event) => {
   if (inFormControl) return;
 
   event.preventDefault();
-  tryStartRoll({ forceRestart: true });
+  startRoll();
 });
 
 // ── Render / animation loop ───────────────────────────────────────────────────

@@ -24,10 +24,14 @@ export function initScene(container) {
 
   // ── Camera ───────────────────────────────────────────────────────────────────
   const camera = new THREE.PerspectiveCamera(52, w / h, 0.1, 140);
-  const trayHalfSize = 6.5;
-  const trayFitRadius = trayHalfSize * Math.SQRT2 * 1.06;
+  let trayHalfSize = 6.5;
+  const trayPadding = 1.06;
   const trayTarget = new THREE.Vector3(0, 0, 0);
   const baseDirection = new THREE.Vector3(0, 16, 10).normalize();
+
+  function getTrayFitRadius() {
+    return trayHalfSize * Math.SQRT2 * trayPadding;
+  }
 
   function updateCameraToFitTray(width, height) {
     const safeHeight = Math.max(1, height);
@@ -35,7 +39,7 @@ export function initScene(container) {
     const vFov = THREE.MathUtils.degToRad(camera.fov);
     const hFov = 2 * Math.atan(Math.tan(vFov / 2) * aspect);
     const limitingHalfFov = Math.min(vFov, hFov) / 2;
-    const distance = trayFitRadius / Math.sin(limitingHalfFov);
+    const distance = getTrayFitRadius() / Math.sin(limitingHalfFov);
 
     camera.position.copy(baseDirection).multiplyScalar(distance).add(trayTarget);
     camera.lookAt(trayTarget);
@@ -54,16 +58,25 @@ export function initScene(container) {
   fill.position.set(-5, 8, -4);
   scene.add(fill);
 
-  // ── Resize ───────────────────────────────────────────────────────────────────
-  new ResizeObserver(() => {
-    const r2 = container.getBoundingClientRect();
-    const nw = r2.width  > 10 ? r2.width  : (window.innerWidth  - 304);
-    const nh = r2.height > 10 ? r2.height : (window.innerHeight - 52);
+  function resizeScene() {
+    const nextRect = container.getBoundingClientRect();
+    const nw = nextRect.width  > 10 ? nextRect.width  : (window.innerWidth  - 304);
+    const nh = nextRect.height > 10 ? nextRect.height : (window.innerHeight - 52);
     renderer.setSize(nw, nh);
     camera.aspect = nw / nh;
     updateCameraToFitTray(nw, nh);
     camera.updateProjectionMatrix();
+  }
+
+  function setTrayHalfSize(nextHalfSize) {
+    trayHalfSize = Math.max(2, Number(nextHalfSize) || 6.5);
+    resizeScene();
+  }
+
+  // ── Resize ───────────────────────────────────────────────────────────────────
+  new ResizeObserver(() => {
+    resizeScene();
   }).observe(container);
 
-  return { scene, camera, renderer };
+  return { scene, camera, renderer, setTrayHalfSize };
 }
