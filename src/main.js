@@ -401,7 +401,7 @@ function startRoll() {
 }
 
 window.addEventListener('keydown', (event) => {
-  if (event.code !== 'Space' || event.repeat || !canTriggerRoll()) return;
+  if (event.code !== 'Space' || event.repeat) return;
 
   const active = document.activeElement;
   const tag = active?.tagName;
@@ -409,7 +409,7 @@ window.addEventListener('keydown', (event) => {
   if (inFormControl) return;
 
   event.preventDefault();
-  startRoll();
+  tryStartRoll({ forceRestart: true });
 });
 
 // ── Render / animation loop ───────────────────────────────────────────────────
