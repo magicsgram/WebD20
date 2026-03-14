@@ -69,6 +69,10 @@ function tryStartRoll({ forceRestart = false } = {}) {
 }
 
 function hideCanvasResultPopup() {
+  if (popupTimer) {
+    clearTimeout(popupTimer);
+    popupTimer = null;
+  }
   canvasResultPopup.classList.remove('show');
   canvasResultPopup.innerHTML = '';
 }
@@ -79,11 +83,6 @@ function showCanvasResultPopup(total, values) {
     .join('');
   canvasResultPopup.innerHTML = `<div class="canvas-result-total">Total: ${total}</div>${lines}`;
   canvasResultPopup.classList.add('show');
-  if (popupTimer) clearTimeout(popupTimer);
-  popupTimer = setTimeout(() => {
-    hideCanvasResultPopup();
-    popupTimer = null;
-  }, 2800);
 }
 
 function getContrastTextColor(hex) {
