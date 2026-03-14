@@ -235,6 +235,18 @@ export function createDie(sides, colorIndex, colorHexOverride) {
   mesh.castShadow    = false;
   mesh.receiveShadow = false;
 
+  const outlines = new THREE.LineSegments(
+    dieGeometryData.edgesGeometry,
+    new THREE.LineBasicMaterial({
+      color: 0x050505,
+      transparent: true,
+      opacity: 0.92,
+      depthWrite: false,
+    })
+  );
+  outlines.renderOrder = 2;
+  mesh.add(outlines);
+
   return {
     mesh,
     faceNormals: dieGeometryData.faceNormals,
