@@ -17,19 +17,16 @@ body {
 
 /* ── Main layout ─────────────────────────────────────────────────────────── */
 .layout {
-  display: grid;
-  grid-template-columns: 300px 1fr;
-  grid-template-areas: 'panel canvas';
+  position: relative;
+  width: 100vw;
   height: 100vh;
   overflow: hidden;
 }
 
 /* ── 3-D canvas ──────────────────────────────────────────────────────────── */
 #canvas-container {
-  grid-area: canvas;
-  position: relative;
-  width: 100%;
-  height: 100%;
+  position: absolute;
+  inset: 0;
   background: #060c17;
   overflow: hidden;
 }
@@ -61,6 +58,7 @@ body {
 }
 
 .canvas-menu-btn {
+  position: absolute;
   top: 0.7rem;
   left: 0.7rem;
   width: 2rem;
@@ -70,6 +68,7 @@ body {
   padding: 0;
   font-size: 1rem;
   font-weight: 700;
+  z-index: 30;
 }
 
 .canvas-roll-btn {
@@ -122,26 +121,34 @@ body {
   line-height: 1.28;
 }
 
-/* ── Side panel ──────────────────────────────────────────────────────────── */
+/* ── Side panel blade overlay ────────────────────────────────────────────── */
 .side-panel {
-  grid-area: panel;
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 300px;
+  height: 100%;
+  z-index: 20;
   display: flex;
   flex-direction: column;
   gap: 0;
-  min-height: 0;
   overflow-y: auto;
   border-right: 1px solid #1e3528;
-  background: rgba(8, 16, 10, 0.92);
-  backdrop-filter: blur(4px);
-}
-
-body.panel-hidden .layout {
-  grid-template-columns: 1fr;
-  grid-template-areas: 'canvas';
+  background: rgba(8, 16, 10, 0.94);
+  backdrop-filter: blur(8px);
+  transform: translateX(0);
+  transition: transform 0.22s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: 4px 0 24px rgba(0,0,0,0.45);
 }
 
 body.panel-hidden .side-panel {
-  display: none;
+  transform: translateX(-100%);
+  background: transparent;
+  border-right-color: transparent;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  box-shadow: none;
+  pointer-events: none;
 }
 
 .panel {
@@ -278,22 +285,10 @@ select:focus {
   color: #fbbf24;
 }
 
-/* ── Narrow screens: stack vertically ───────────────────────────────────── */
+/* ── Narrow screens ─────────────────────────────────────────────────────── */
 @media (max-width: 720px) {
-  .layout {
-    grid-template-columns: 1fr;
-    grid-template-rows: 55vh minmax(0, 1fr);
-    grid-template-areas:
-      'canvas'
-      'panel';
-    height: 100vh;
-    min-height: 100vh;
-  }
-
   .side-panel {
-    border-right: none;
-    border-top: 1px solid #1e3528;
-    overflow-y: auto;
+    width: min(300px, 85vw);
     -webkit-overflow-scrolling: touch;
   }
 }

@@ -31,7 +31,9 @@ canvasRollBtn.textContent = 'Roll';
 const canvasResultPopup = document.createElement('div');
 canvasResultPopup.className = 'canvas-result-popup';
 
-canvasContainer.append(panelToggleBtn, fullscreenBtn, canvasRollBtn, canvasResultPopup);
+const layoutEl = document.querySelector('.layout');
+layoutEl.append(panelToggleBtn);
+canvasContainer.append(fullscreenBtn, canvasRollBtn, canvasResultPopup);
 
 const COLOR_PALETTE = [
   '#a6cee3', '#1f78b4', '#b2df8a', '#33a02c',
@@ -239,7 +241,7 @@ function buildPhysicsWorld() {
   const w = new RAPIER.World({ x: 0, y: -9.81, z: 0 });
 
   const wallThickness = 0.45;
-  const wallHalfHeight = 8;
+  const wallHalfHeight = 60;
   const halfSize = 6.5;
   const wallRestitution = 0.34;
   const wallFriction = 0.18;
@@ -265,11 +267,6 @@ function buildPhysicsWorld() {
     );
   });
 
-  const ceilingBody = w.createRigidBody(
-    RAPIER.RigidBodyDesc.fixed().setTranslation(0, 14, 0)
-  );
-  w.createCollider(RAPIER.ColliderDesc.cuboid(halfSize, 0.2, halfSize), ceilingBody);
-
   return w;
 }
 
@@ -280,7 +277,7 @@ function spawnDie(physWorld, dieObj, index, total) {
   const col  = index % cols;
   const x = (col - (cols - 1) / 2) * 1.3 + (Math.random() - 0.5) * 0.4;
   const z = (row - Math.floor(total / cols) / 2) * 1.3 + (Math.random() - 0.5) * 0.4;
-  const y = 4.5 + index * 0.55;
+  const y = 3.5 + index * 0.28;
 
   const bodyDesc = RAPIER.RigidBodyDesc.dynamic()
     .setTranslation(x, y, z)

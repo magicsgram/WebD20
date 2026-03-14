@@ -21,7 +21,6 @@ export function initScene(container) {
   // ── Scene ────────────────────────────────────────────────────────────────────
   const scene = new THREE.Scene();
   scene.background = new THREE.Color(0x000000);
-  scene.fog = new THREE.FogExp2(0x000000, 0.028);
 
   // ── Camera ───────────────────────────────────────────────────────────────────
   const camera = new THREE.PerspectiveCamera(52, w / h, 0.1, 140);
