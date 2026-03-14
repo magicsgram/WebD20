@@ -25,24 +25,64 @@ export function initScene(container) {
   // ── Camera ───────────────────────────────────────────────────────────────────
   const camera = new THREE.PerspectiveCamera(52, w / h, 0.1, 140);
   let trayHalfSize = 6.5;
-  const trayPadding = 1.06;
   const trayTarget = new THREE.Vector3(0, 0, 0);
   const baseDirection = new THREE.Vector3(0, 16, 10).normalize();
+  const fitDistanceEpsilon = 0.998;
+  const fitCorners = [
+    new THREE.Vector3(),
+    new THREE.Vector3(),
+    new THREE.Vector3(),
+    new THREE.Vector3(),
+  ];
+  const projected = new THREE.Vector3();
 
-  function getTrayFitRadius() {
-    return trayHalfSize * Math.SQRT2 * trayPadding;
+  function setTrayCorners() {
+    const hs = trayHalfSize;
+    fitCorners[0].set(-hs, 0, -hs);
+    fitCorners[1].set(-hs, 0, hs);
+    fitCorners[2].set(hs, 0, -hs);
+    fitCorners[3].set(hs, 0, hs);
+  }
+
+  function placeCameraAtDistance(distance) {
+    camera.position.copy(baseDirection).multiplyScalar(distance).add(trayTarget);
+    camera.lookAt(trayTarget);
+    camera.updateMatrixWorld(true);
+  }
+
+  function trayFitsViewportAtDistance(distance) {
+    placeCameraAtDistance(distance);
+
+    let maxAbsX = 0;
+    let maxAbsY = 0;
+    for (let i = 0; i < fitCorners.length; i++) {
+      projected.copy(fitCorners[i]).project(camera);
+      maxAbsX = Math.max(maxAbsX, Math.abs(projected.x));
+      maxAbsY = Math.max(maxAbsY, Math.abs(projected.y));
+    }
+
+    return maxAbsX <= fitDistanceEpsilon && maxAbsY <= fitDistanceEpsilon;
   }
 
   function updateCameraToFitTray(width, height) {
     const safeHeight = Math.max(1, height);
-    const aspect = width / safeHeight;
-    const vFov = THREE.MathUtils.degToRad(camera.fov);
-    const hFov = 2 * Math.atan(Math.tan(vFov / 2) * aspect);
-    const limitingHalfFov = Math.min(vFov, hFov) / 2;
-    const distance = getTrayFitRadius() / Math.sin(limitingHalfFov);
+    camera.aspect = Math.max(1, width) / safeHeight;
+    camera.updateProjectionMatrix();
 
-    camera.position.copy(baseDirection).multiplyScalar(distance).add(trayTarget);
-    camera.lookAt(trayTarget);
+    setTrayCorners();
+
+    let near = 0.1;
+    let far = 300;
+    for (let i = 0; i < 28; i++) {
+      const mid = (near + far) * 0.5;
+      if (trayFitsViewportAtDistance(mid)) {
+        far = mid;
+      } else {
+        near = mid;
+      }
+    }
+
+    placeCameraAtDistance(far);
   }
 
   updateCameraToFitTray(w, h);
@@ -63,9 +103,7 @@ export function initScene(container) {
     const nw = nextRect.width  > 10 ? nextRect.width  : (window.innerWidth  - 304);
     const nh = nextRect.height > 10 ? nextRect.height : (window.innerHeight - 52);
     renderer.setSize(nw, nh);
-    camera.aspect = nw / nh;
     updateCameraToFitTray(nw, nh);
-    camera.updateProjectionMatrix();
   }
 
   function setTrayHalfSize(nextHalfSize) {

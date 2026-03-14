@@ -108,10 +108,10 @@ function shuffledColorsForCount(count) {
 }
 
 function getTrayScaleForDiceCount(count) {
-  const minDice = 2;
+  const minDice = 1;
   const maxDice = 20;
-  const minScale = 0.7;
-  const maxScale = 1.15;
+  const minScale = 0.5;
+  const maxScale = 1.4;
   const clamped = Math.min(maxDice, Math.max(minDice, count));
   const progress = (clamped - minDice) / (maxDice - minDice);
   return minScale + (maxScale - minScale) * progress;
