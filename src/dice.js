@@ -238,7 +238,6 @@ export function createDie(sides, colorIndex, colorHexOverride) {
       gradientMap: TOON_GRADIENT,
       emissive: new THREE.Color(hexColor),
       emissiveIntensity: 0.16,
-      flatShading: true,
     })
   );
 

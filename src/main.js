@@ -25,9 +25,7 @@ fullscreenBtn.textContent = 'Fullscreen';
 const canvasResultPopup = document.createElement('div');
 canvasResultPopup.className = 'canvas-result-popup';
 
-const layoutEl = document.querySelector('.layout');
-layoutEl.append(panelToggleBtn);
-canvasContainer.append(fullscreenBtn, canvasResultPopup);
+canvasContainer.append(panelToggleBtn, fullscreenBtn, canvasResultPopup);
 
 const COLOR_PALETTE = [
   '#a6cee3', '#1f78b4', '#b2df8a', '#33a02c',
@@ -109,8 +107,8 @@ function shuffledColorsForCount(count) {
 function getTrayScaleForDiceCount(count) {
   const minDice = 1;
   const maxDice = 20;
-  const minScale = 0.5;
-  const maxScale = 1.4;
+  const minScale = 0.6;
+  const maxScale = 1.25;
   const clamped = Math.min(maxDice, Math.max(minDice, count));
   const progress = (clamped - minDice) / (maxDice - minDice);
   return minScale + (maxScale - minScale) * progress;
@@ -179,6 +177,7 @@ function renderDiceSelectors() {
     colorSelect.addEventListener('change', () => {
       dieColors[i] = colorSelect.value;
       applyColorSelectStyle();
+      clearDiceFromCanvas();
     });
     applyColorSelectStyle();
 
@@ -198,8 +197,21 @@ function setAllDiceTypes(value) {
   });
 }
 
-setAllD6Btn.addEventListener('click', () => setAllDiceTypes(6));
-setAllD20Btn.addEventListener('click', () => setAllDiceTypes(20));
+setAllD6Btn.addEventListener('click', () => {
+  setAllDiceTypes(6);
+  clearDiceFromCanvas();
+});
+setAllD20Btn.addEventListener('click', () => {
+  setAllDiceTypes(20);
+  clearDiceFromCanvas();
+});
+diceConfigs.addEventListener('change', (event) => {
+  const target = event.target;
+  if (!(target instanceof HTMLSelectElement)) return;
+  if (target.dataset.dieType === 'true') {
+    clearDiceFromCanvas();
+  }
+});
 renderDiceSelectors();
 
 setRollButtonState(false, 'Roll');
@@ -240,6 +252,7 @@ panelToggleBtn.addEventListener('click', () => {
 const { scene, camera, renderer, setTrayHalfSize } = initScene(canvasContainer);
 
 diceCountSelect.addEventListener('change', () => {
+  clearDiceFromCanvas();
   renderDiceSelectors();
   setTrayHalfSize(getTrayHalfSizeForDiceCount(Number(diceCountSelect.value)));
 });
@@ -251,7 +264,7 @@ let entities  = []; // { body, mesh, faceNormals, sides }
 let simActive = false;
 let stepCount = 0;
 let stableFrames = 0;
-const MAX_STEPS = 650;
+const MAX_STEPS = 550;
 const MIN_STABLE_FRAMES = 24;
 const MIN_ROLL_STEPS = 70;
 const LINEAR_STOP_SPEED = 0.08;
@@ -274,31 +287,35 @@ const DICE_PHYSICS = {
 function buildPhysicsWorld(halfSize) {
   const w = new RAPIER.World({ x: 0, y: -9.81, z: 0 });
 
-  const wallThickness = 0.45;
+  const wallThickness = 0.5;
   const wallHalfHeight = 60;
   const wallRestitution = 0.34;
   const wallFriction = 0.18;
+  const trayRadius = halfSize;
+  const wallSegments = 64;
 
   // Floor slab
   const fb = w.createRigidBody(RAPIER.RigidBodyDesc.fixed().setTranslation(0, -0.05, 0));
   w.createCollider(
-    RAPIER.ColliderDesc.cuboid(halfSize, 0.1, halfSize).setRestitution(0.12).setFriction(0.82),
+    RAPIER.ColliderDesc.cuboid(trayRadius, 0.1, trayRadius).setRestitution(0.12).setFriction(0.82),
     fb
   );
 
-  // Four walls (X+, X-, Z+, Z-) + invisible ceiling
-  [[ halfSize, wallHalfHeight - 0.05, 0, wallThickness, wallHalfHeight, halfSize],
-   [-halfSize, wallHalfHeight - 0.05, 0, wallThickness, wallHalfHeight, halfSize],
-   [0, wallHalfHeight - 0.05, halfSize, halfSize, wallHalfHeight, wallThickness],
-   [0, wallHalfHeight - 0.05, -halfSize, halfSize, wallHalfHeight, wallThickness]].forEach(([x, y, z, hx, hy, hz]) => {
-    const b = w.createRigidBody(RAPIER.RigidBodyDesc.fixed().setTranslation(x, y, z));
+  // Circular wall made of vertical cylinder segments
+  for (let i = 0; i < wallSegments; i++) {
+    const angle = (i / wallSegments) * Math.PI * 2;
+    const x = Math.cos(angle) * trayRadius;
+    const z = Math.sin(angle) * trayRadius;
+    const b = w.createRigidBody(
+      RAPIER.RigidBodyDesc.fixed().setTranslation(x, wallHalfHeight - 0.05, z)
+    );
     w.createCollider(
-      RAPIER.ColliderDesc.cuboid(hx, hy, hz)
+      RAPIER.ColliderDesc.cylinder(wallHalfHeight, wallThickness)
         .setRestitution(wallRestitution)
         .setFriction(wallFriction),
       b
     );
-  });
+  }
 
   return w;
 }
@@ -390,16 +407,29 @@ function showResults() {
   showCanvasResultPopup(sum, valueItems);
 }
 
-// ── Roll handler ─────────────────────────────────────────────────────────────
-function startRoll() {
-  // Tear down previous
-  entities.forEach(e => {
+function clearDiceFromCanvas() {
+  entities.forEach((e) => {
     scene.remove(e.mesh);
     disposeDieMesh(e.mesh);
   });
   entities = [];
+
   hideCanvasResultPopup();
-  if (world) { world.free(); world = null; }
+
+  if (world) {
+    world.free();
+    world = null;
+  }
+
+  simActive = false;
+  stepCount = 0;
+  stableFrames = 0;
+  setRollButtonState(false, 'Roll');
+}
+
+// ── Roll handler ─────────────────────────────────────────────────────────────
+function startRoll() {
+  clearDiceFromCanvas();
 
   const selectedDice = Array.from(
     document.querySelectorAll('select[data-die-type="true"]')
