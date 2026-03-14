@@ -26,6 +26,9 @@ fullscreenBtn.textContent = 'Fullscreen';
 const canvasResultPopup = document.createElement('div');
 canvasResultPopup.className = 'canvas-result-popup';
 
+const totalFlashPopup = document.createElement('div');
+totalFlashPopup.className = 'canvas-total-flash';
+
 const relandFlashPopup = document.createElement('div');
 relandFlashPopup.className = 'canvas-reroll-flash';
 relandFlashPopup.textContent = 'Re-roll';
@@ -34,13 +37,83 @@ if (sidePanel) {
   canvasContainer.append(sidePanel);
 }
 canvasContainer.append(panelToggleBtn, fullscreenBtn, canvasResultPopup);
-canvasContainer.append(relandFlashPopup);
+canvasContainer.append(relandFlashPopup, totalFlashPopup);
 
 const COLOR_PALETTE = [
   '#a6cee3', '#1f78b4', '#b2df8a', '#33a02c',
   '#fb9a99', '#e31a1c', '#fdbf6f', '#ff7f00',
   '#cab2d6', '#6a3d9a', '#ffff99', '#b15928',
 ];
+
+const RUNTIME_CONFIG = {
+  trayScale: {
+    minDice: 1,
+    maxDice: 24,
+    minScale: 0.5,
+    maxScale: 1.5,
+    baseHalfSize: 6.5,
+  },
+  flash: {
+    relandDurationMs: 2000,
+    resultDurationMs: 2500,
+  },
+  simulation: {
+    maxSteps: 450,
+    minStableFrames: 24,
+    minRollSteps: 70,
+    linearStopSpeed: 0.08,
+    angularStopSpeed: 0.18,
+    verticalStopSpeed: 0.07,
+    settleHeight: 1.25,
+    faceLandAlignmentMin: 0.90,
+    surfaceLandHeightFactor: 1.14,
+    surfaceLandHeightMin: 0.78,
+  },
+  reland: {
+    maxAttempts: 8,
+    verticalLift: 1.0,
+    upwardImpulseBase: 40.0,
+    upwardImpulseStep: 0.9,
+    lateralImpulse: 3.5,
+    torqueImpulse: 4.8,
+    tiltMinDeg: 15,
+    tiltMaxDeg: 30,
+  },
+  physics: {
+    dice: {
+      linearDamping: 0.0,
+      angularDamping: 0.0,
+      friction: 0.18,
+      restitution: 0.14,
+      density: 2.1,
+    },
+    world: {
+      wallThickness: 0.5,
+      wallHalfHeight: 60,
+      wallRestitution: 0.34,
+      wallFriction: 0.10,
+      floorRestitution: 0.12,
+      floorFriction: 0.54,
+      wallSegments: 64,
+    },
+    launch: {
+      strengthBase: 10.8,
+      strengthRandom: 3.2,
+      impulseOffset: 3,
+      torqueStrength: 10,
+      upwardBase: 15.0,
+      upwardRandom: 5.0,
+    },
+  },
+};
+
+const TRAY_SCALE = RUNTIME_CONFIG.trayScale;
+const FLASH = RUNTIME_CONFIG.flash;
+const SIM = RUNTIME_CONFIG.simulation;
+const RELAND = RUNTIME_CONFIG.reland;
+const PHYS = RUNTIME_CONFIG.physics;
+const SIM_LINEAR_STOP_SPEED_SQ = SIM.linearStopSpeed * SIM.linearStopSpeed;
+const SIM_ANGULAR_STOP_SPEED_SQ = SIM.angularStopSpeed * SIM.angularStopSpeed;
 
 let dieColors = [];
 let popupTimer = null;
@@ -81,8 +154,16 @@ function hideCanvasResultPopup() {
     clearTimeout(popupTimer);
     popupTimer = null;
   }
+  totalFlashPopup.classList.remove('show');
   canvasResultPopup.classList.remove('show');
   canvasResultPopup.innerHTML = '';
+}
+
+function triggerTotalFlash(total) {
+  totalFlashPopup.textContent = `Total: ${total}`;
+  totalFlashPopup.classList.remove('show');
+  void totalFlashPopup.offsetWidth;
+  totalFlashPopup.classList.add('show');
 }
 
 function triggerRelandFlash() {
@@ -98,7 +179,7 @@ function triggerRelandFlash() {
   relandFlashTimer = setTimeout(() => {
     relandFlashPopup.classList.remove('show');
     relandFlashTimer = null;
-  }, 2000);
+  }, FLASH.relandDurationMs);
 }
 
 function showCanvasResultPopup(total, values) {
@@ -107,6 +188,7 @@ function showCanvasResultPopup(total, values) {
     .join('');
   canvasResultPopup.innerHTML = `<div class="canvas-result-total">Total: ${total}</div>${lines}`;
   canvasResultPopup.classList.add('show');
+  triggerTotalFlash(total);
 }
 
 function getContrastTextColor(hex) {
@@ -131,22 +213,17 @@ function shuffledColorsForCount(count) {
 }
 
 function getTrayScaleForDiceCount(count) {
-  const minDice = 1;
-  const maxDice = 20;
-  const minScale = 0.5;
-  const maxScale = 1.5;
-  const clamped = Math.min(maxDice, Math.max(minDice, count));
-  const progress = (clamped - minDice) / (maxDice - minDice);
-  return minScale + (maxScale - minScale) * progress;
+  const clamped = Math.min(TRAY_SCALE.maxDice, Math.max(TRAY_SCALE.minDice, count));
+  const progress = (clamped - TRAY_SCALE.minDice) / (TRAY_SCALE.maxDice - TRAY_SCALE.minDice);
+  return TRAY_SCALE.minScale + (TRAY_SCALE.maxScale - TRAY_SCALE.minScale) * progress;
 }
 
 function getTrayHalfSizeForDiceCount(count) {
-  const baseTrayHalfSize = 6.5;
-  return baseTrayHalfSize * getTrayScaleForDiceCount(count);
+  return TRAY_SCALE.baseHalfSize * getTrayScaleForDiceCount(count);
 }
 
 // ── Dice count selector ──────────────────────────────────────────────────────
-for (let i = 1; i <= 20; i++) {
+for (let i = TRAY_SCALE.minDice; i <= TRAY_SCALE.maxDice; i++) {
   const o = document.createElement('option');
   o.value = String(i); o.textContent = String(i);
   if (i === 2) o.selected = true;
@@ -291,51 +368,24 @@ let simActive = false;
 let stepCount = 0;
 let stableFrames = 0;
 let relandAttempts = 0;
-const MAX_STEPS = 450;
-const MAX_RELAND_ATTEMPTS = 8;
-const MIN_STABLE_FRAMES = 24;
-const MIN_ROLL_STEPS = 70;
-const LINEAR_STOP_SPEED = 0.08;
-const ANGULAR_STOP_SPEED = 0.18;
-const VERTICAL_STOP_SPEED = 0.07;
-const SETTLE_HEIGHT = 1.25;
-const LINEAR_STOP_SPEED_SQ = LINEAR_STOP_SPEED * LINEAR_STOP_SPEED;
-const ANGULAR_STOP_SPEED_SQ = ANGULAR_STOP_SPEED * ANGULAR_STOP_SPEED;
-const FACE_LAND_ALIGNMENT_MIN = 0.90;
-const SURFACE_LAND_HEIGHT_FACTOR = 1.14;
-const SURFACE_LAND_HEIGHT_MIN = 0.78;
-const RELAND_VERTICAL_LIFT = 1.0;
-const RELAND_UPWARD_IMPULSE_BASE = 30.0;
-const RELAND_UPWARD_IMPULSE_STEP = 0.9;
-const RELAND_LATERAL_IMPULSE = 3.5;
-const RELAND_TORQUE_IMPULSE = 4.8;
-const RELAND_TILT_MIN_DEG = 15;
-const RELAND_TILT_MAX_DEG = 30;
-
-// ── Shared dice physics config (applies to both d6 and d20) ─────────────────
-const DICE_PHYSICS = {
-  linearDamping: 0.0,
-  angularDamping: 0.0,
-  friction: 0.18,
-  restitution: 0.14,
-  density: 2.1,
-};
 
 // ── Physics world builder ────────────────────────────────────────────────────
 function buildPhysicsWorld(halfSize) {
   const w = new RAPIER.World({ x: 0, y: -9.81, z: 0 });
 
-  const wallThickness = 0.5;
-  const wallHalfHeight = 60;
-  const wallRestitution = 0.34;
-  const wallFriction = 0.10;
+  const wallThickness = PHYS.world.wallThickness;
+  const wallHalfHeight = PHYS.world.wallHalfHeight;
+  const wallRestitution = PHYS.world.wallRestitution;
+  const wallFriction = PHYS.world.wallFriction;
   const trayRadius = halfSize;
-  const wallSegments = 64;
+  const wallSegments = PHYS.world.wallSegments;
 
   // Floor slab
   const fb = w.createRigidBody(RAPIER.RigidBodyDesc.fixed().setTranslation(0, -0.05, 0));
   w.createCollider(
-    RAPIER.ColliderDesc.cuboid(trayRadius, 0.1, trayRadius).setRestitution(0.12).setFriction(0.54),
+    RAPIER.ColliderDesc.cuboid(trayRadius, 0.1, trayRadius)
+      .setRestitution(PHYS.world.floorRestitution)
+      .setFriction(PHYS.world.floorFriction),
     fb
   );
 
@@ -369,8 +419,8 @@ function spawnDie(physWorld, dieObj, index, total) {
 
   const bodyDesc = RAPIER.RigidBodyDesc.dynamic()
     .setTranslation(x, y, z)
-    .setLinearDamping(DICE_PHYSICS.linearDamping)
-    .setAngularDamping(DICE_PHYSICS.angularDamping);
+    .setLinearDamping(PHYS.dice.linearDamping)
+    .setAngularDamping(PHYS.dice.angularDamping);
 
   if (typeof bodyDesc.setCcdEnabled === 'function') {
     bodyDesc.setCcdEnabled(true);
@@ -393,20 +443,20 @@ function spawnDie(physWorld, dieObj, index, total) {
       RAPIER.ColliderDesc.ball(dieObj.physRadius * 0.88);
   }
   const dieDensity = dieObj.sides === 20
-    ? DICE_PHYSICS.density * 0.78
-    : DICE_PHYSICS.density;
+    ? PHYS.dice.density * 0.78
+    : PHYS.dice.density;
   colliderDesc
-    .setRestitution(DICE_PHYSICS.restitution)
-    .setFriction(DICE_PHYSICS.friction)
+    .setRestitution(PHYS.dice.restitution)
+    .setFriction(PHYS.dice.friction)
     .setDensity(dieDensity);
   physWorld.createCollider(colliderDesc, body);
 
   const launchAngle = Math.random() * Math.PI * 2;
-  const launchStrength = 10.8 + Math.random() * 3.2;
-  const launchImpulseOffset = 3;
-  const launchTorqueStrength = 10;
-  const launchUpwardBase = 15.0;
-  const launchUpwardRandom = 5.0;
+  const launchStrength = PHYS.launch.strengthBase + Math.random() * PHYS.launch.strengthRandom;
+  const launchImpulseOffset = PHYS.launch.impulseOffset;
+  const launchTorqueStrength = PHYS.launch.torqueStrength;
+  const launchUpwardBase = PHYS.launch.upwardBase;
+  const launchUpwardRandom = PHYS.launch.upwardRandom;
   body.applyImpulse({
     x: Math.cos(launchAngle) * launchStrength,
     y: launchUpwardBase + Math.random() * launchUpwardRandom,
@@ -446,7 +496,7 @@ function showResults(resultEntries = null) {
 }
 
 function getSurfaceLandingHeight(entity) {
-  return Math.max(SURFACE_LAND_HEIGHT_MIN, entity.physRadius * SURFACE_LAND_HEIGHT_FACTOR);
+  return Math.max(SIM.surfaceLandHeightMin, entity.physRadius * SIM.surfaceLandHeightFactor);
 }
 
 function inspectDiceLandings() {
@@ -456,7 +506,7 @@ function inspectDiceLandings() {
     const value = topFace.index + 1;
     const translation = entity.body.translation();
     const onSurface = translation.y <= getSurfaceLandingHeight(entity);
-    const faceLanded = topFace.alignment >= FACE_LAND_ALIGNMENT_MIN;
+    const faceLanded = topFace.alignment >= SIM.faceLandAlignmentMin;
 
     return {
       entity,
@@ -472,19 +522,19 @@ function inspectDiceLandings() {
 function relaunchInvalidDice(invalidEntries) {
   relandAttempts += 1;
   triggerRelandFlash();
-  const upwardImpulse = RELAND_UPWARD_IMPULSE_BASE + ((relandAttempts - 1) * RELAND_UPWARD_IMPULSE_STEP);
+  const upwardImpulse = RELAND.upwardImpulseBase + ((relandAttempts - 1) * RELAND.upwardImpulseStep);
 
   const relandTargets = invalidEntries.map((entry) => entry.entity);
 
   relandTargets.forEach((entity) => {
     const { body, physRadius } = entity;
     const t = body.translation();
-    const lift = Math.max(RELAND_VERTICAL_LIFT, physRadius * 0.45);
+    const lift = Math.max(RELAND.verticalLift, physRadius * 0.45);
     const heading = Math.random() * Math.PI * 2;
-    const tiltDeg = RELAND_TILT_MIN_DEG + (Math.random() * (RELAND_TILT_MAX_DEG - RELAND_TILT_MIN_DEG));
+    const tiltDeg = RELAND.tiltMinDeg + (Math.random() * (RELAND.tiltMaxDeg - RELAND.tiltMinDeg));
     const tiltRad = (tiltDeg * Math.PI) / 180;
     const lateralFromTilt = upwardImpulse * Math.tan(tiltRad);
-    const lateralImpulse = Math.max(RELAND_LATERAL_IMPULSE, lateralFromTilt);
+    const lateralImpulse = Math.max(RELAND.lateralImpulse, lateralFromTilt);
 
     body.setTranslation({ x: t.x, y: t.y + lift, z: t.z }, true);
     body.setLinvel({ x: 0, y: 0, z: 0 }, true);
@@ -499,9 +549,9 @@ function relaunchInvalidDice(invalidEntries) {
       z: Math.sin(heading) * lateralImpulse,
     }, true);
     body.applyTorqueImpulse({
-      x: (Math.random() - 0.5) * RELAND_TORQUE_IMPULSE,
-      y: (Math.random() - 0.5) * RELAND_TORQUE_IMPULSE,
-      z: (Math.random() - 0.5) * RELAND_TORQUE_IMPULSE,
+      x: (Math.random() - 0.5) * RELAND.torqueImpulse,
+      y: (Math.random() - 0.5) * RELAND.torqueImpulse,
+      z: (Math.random() - 0.5) * RELAND.torqueImpulse,
     }, true);
   });
 
@@ -602,25 +652,25 @@ function animate() {
         allSleeping = false;
       }
 
-      if (!(t.y <= SETTLE_HEIGHT && Math.abs(lv.y) < VERTICAL_STOP_SPEED)) {
+      if (!(t.y <= SIM.settleHeight && Math.abs(lv.y) < SIM.verticalStopSpeed)) {
         nearFloor = false;
       }
 
       const linearSpeedSq = (lv.x * lv.x) + (lv.y * lv.y) + (lv.z * lv.z);
       const angularSpeedSq = (av.x * av.x) + (av.y * av.y) + (av.z * av.z);
-      if (!(linearSpeedSq < LINEAR_STOP_SPEED_SQ && angularSpeedSq < ANGULAR_STOP_SPEED_SQ)) {
+      if (!(linearSpeedSq < SIM_LINEAR_STOP_SPEED_SQ && angularSpeedSq < SIM_ANGULAR_STOP_SPEED_SQ)) {
         nearlyStopped = false;
       }
     }
 
-    const canEvaluateStable = stepCount >= MIN_ROLL_STEPS;
+    const canEvaluateStable = stepCount >= SIM.minRollSteps;
     stableFrames = canEvaluateStable && nearFloor && nearlyStopped ? stableFrames + 1 : 0;
 
-    if ((allSleeping && nearFloor) || stableFrames >= MIN_STABLE_FRAMES || stepCount >= MAX_STEPS) {
+    if ((allSleeping && nearFloor) || stableFrames >= SIM.minStableFrames || stepCount >= SIM.maxSteps) {
       const landingEntries = inspectDiceLandings();
       const invalidEntries = landingEntries.filter((entry) => !entry.valid);
 
-      if (invalidEntries.length > 0 && relandAttempts < MAX_RELAND_ATTEMPTS) {
+      if (invalidEntries.length > 0 && relandAttempts < RELAND.maxAttempts) {
         relaunchInvalidDice(invalidEntries);
       } else {
         simActive = false;

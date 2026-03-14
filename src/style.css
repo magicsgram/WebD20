@@ -58,9 +58,34 @@ body {
   animation: reroll-popup-flash 2s ease-out;
 }
 
+.canvas-total-flash {
+  position: absolute;
+  left: 50%;
+  top: 46%;
+  transform: translate(-50%, -50%);
+  z-index: 34;
+  pointer-events: none;
+  font-size: 2.2rem;
+  font-weight: 900;
+  letter-spacing: 0.04em;
+  color: #f8fafc;
+  padding: 0.28rem 0.7rem;
+  border-radius: 0.55rem;
+  background: rgba(0, 0, 0, 0.62);
+  border: 1px solid rgba(255, 255, 255, 0.24);
+  text-shadow: 0 0 12px rgba(255, 255, 255, 0.65), 0 0 30px rgba(255, 255, 255, 0.45);
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+
+.canvas-total-flash.show {
+  opacity: 1;
+}
+
 @keyframes reroll-popup-flash {
   0% { opacity: 0; transform: translate(-50%, -47%) scale(0.92); }
-  30% { opacity: 1; transform: translate(-50%, -50%) scale(1.03); }
+  10% { opacity: 1; transform: translate(-50%, -50%) scale(1.03); }
+  90% { opacity: 1; transform: translate(-50%, -50%) scale(1.0); }
   100% { opacity: 0; transform: translate(-50%, -53%) scale(1.0); }
 }
 
