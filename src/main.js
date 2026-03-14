@@ -1,6 +1,5 @@
 import RAPIER from '@dimforge/rapier3d';
-import * as THREE from 'three';
-import { createDie, detectValue } from './dice.js';
+import { createDie, detectTopFaceIndex, disposeDieMesh } from './dice.js';
 import { initScene } from './scene.js';
 import './style.css';
 
@@ -260,6 +259,8 @@ const LINEAR_STOP_SPEED = 0.08;
 const ANGULAR_STOP_SPEED = 0.18;
 const VERTICAL_STOP_SPEED = 0.07;
 const SETTLE_HEIGHT = 1.25;
+const LINEAR_STOP_SPEED_SQ = LINEAR_STOP_SPEED * LINEAR_STOP_SPEED;
+const ANGULAR_STOP_SPEED_SQ = ANGULAR_STOP_SPEED * ANGULAR_STOP_SPEED;
 
 // ── Shared dice physics config (applies to both d6 and d20) ─────────────────
 const DICE_PHYSICS = {
@@ -372,21 +373,14 @@ function showResults() {
   const valueItems = [];
 
   entities.forEach(({ body, mesh, faceNormals, sides }, i) => {
-    const value = detectValue(faceNormals, body.rotation());
+    const rotation = body.rotation();
+    const topFaceIdx = detectTopFaceIndex(faceNormals, rotation);
+    const value = topFaceIdx + 1;
     sum += value;
 
-    // Highlight top face with gold emissive
-    const rot = body.rotation();
-    const q   = new THREE.Quaternion(rot.x, rot.y, rot.z, rot.w);
-    const up  = new THREE.Vector3(0, 1, 0);
-    let topFaceIdx = 0, best = -Infinity;
-    faceNormals.forEach((n, idx) => {
-      const d = n.clone().applyQuaternion(q).dot(up);
-      if (d > best) { best = d; topFaceIdx = idx; }
-    });
     const mats = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
     if (mats[topFaceIdx]) {
-      mats[topFaceIdx].emissive           = new THREE.Color(0xffd700);
+      mats[topFaceIdx].emissive.setHex(0xffd700);
       mats[topFaceIdx].emissiveIntensity  = 0.28;
     }
 
@@ -402,9 +396,7 @@ function startRoll() {
   // Tear down previous
   entities.forEach(e => {
     scene.remove(e.mesh);
-    e.mesh.geometry.dispose();
-    (Array.isArray(e.mesh.material) ? e.mesh.material : [e.mesh.material])
-      .forEach(m => { if (m.map) m.map.dispose(); m.dispose(); });
+    disposeDieMesh(e.mesh);
   });
   entities = [];
   hideCanvasResultPopup();
@@ -452,26 +444,33 @@ function animate() {
     world.step();
     stepCount++;
 
+    let allSleeping = true;
+    let nearFloor = true;
+    let nearlyStopped = true;
+
     for (const { body, mesh } of entities) {
       const t = body.translation();
       const r = body.rotation();
-      mesh.position.set(t.x, t.y, t.z);
-      mesh.quaternion.set(r.x, r.y, r.z, r.w);
-    }
-
-    const allSleeping = entities.every(e => e.body.isSleeping());
-    const nearFloor = entities.every(({ body }) => {
-      const t = body.translation();
-      const lv = body.linvel();
-      return t.y <= SETTLE_HEIGHT && Math.abs(lv.y) < VERTICAL_STOP_SPEED;
-    });
-    const nearlyStopped = entities.every(({ body }) => {
       const lv = body.linvel();
       const av = body.angvel();
-      const linearSpeed = Math.hypot(lv.x, lv.y, lv.z);
-      const angularSpeed = Math.hypot(av.x, av.y, av.z);
-      return linearSpeed < LINEAR_STOP_SPEED && angularSpeed < ANGULAR_STOP_SPEED;
-    });
+
+      mesh.position.set(t.x, t.y, t.z);
+      mesh.quaternion.set(r.x, r.y, r.z, r.w);
+
+      if (!body.isSleeping()) {
+        allSleeping = false;
+      }
+
+      if (!(t.y <= SETTLE_HEIGHT && Math.abs(lv.y) < VERTICAL_STOP_SPEED)) {
+        nearFloor = false;
+      }
+
+      const linearSpeedSq = (lv.x * lv.x) + (lv.y * lv.y) + (lv.z * lv.z);
+      const angularSpeedSq = (av.x * av.x) + (av.y * av.y) + (av.z * av.z);
+      if (!(linearSpeedSq < LINEAR_STOP_SPEED_SQ && angularSpeedSq < ANGULAR_STOP_SPEED_SQ)) {
+        nearlyStopped = false;
+      }
+    }
 
     const canEvaluateStable = stepCount >= MIN_ROLL_STEPS;
     stableFrames = canEvaluateStable && nearFloor && nearlyStopped ? stableFrames + 1 : 0;

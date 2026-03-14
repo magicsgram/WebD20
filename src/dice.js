@@ -49,6 +49,12 @@ const TOON_GRADIENT = (() => {
   return tex;
 })();
 
+const DIE_GEOMETRY_CACHE = new Map();
+const FACE_TEXTURE_CACHE = new Map();
+const WORLD_UP = new THREE.Vector3(0, 1, 0);
+const TEMP_ROTATION_QUAT = new THREE.Quaternion();
+const TEMP_ROTATED_NORMAL = new THREE.Vector3();
+
 // ── Canvas face texture ──────────────────────────────────────────────────────
 function makeNumberTexture(number, bgHex, sides) {
   const S = 256;
@@ -108,6 +114,18 @@ function makeNumberTexture(number, bgHex, sides) {
 
   const tex = new THREE.CanvasTexture(canvas);
   tex.colorSpace = THREE.SRGBColorSpace;
+  tex.generateMipmaps = true;
+  tex.anisotropy = 1;
+  return tex;
+}
+
+function getCachedFaceTexture(number, bgHex, sides) {
+  const key = `${sides}|${bgHex}|${number}`;
+  let tex = FACE_TEXTURE_CACHE.get(key);
+  if (!tex) {
+    tex = makeNumberTexture(number, bgHex, sides);
+    FACE_TEXTURE_CACHE.set(key, tex);
+  }
   return tex;
 }
 
@@ -156,17 +174,14 @@ function computeFaceNormals(geometry, numFaces, trisPerFace) {
   return normals;
 }
 
-// ── Public: create a die object ──────────────────────────────────────────────
-/**
- * Returns { mesh, faceNormals, physPositions, sides, physRadius }
- */
-export function createDie(sides, colorIndex, colorHexOverride) {
-  const numFaces    = FACE_COUNT[sides];
-  const trisPerFace = TRIS_PER_FACE[sides];
-  const scale       = SCALE[sides];
-  const hexColor    = colorHexOverride ?? PALETTE[colorIndex % PALETTE.length];
+function getOrCreateDieGeometryData(sides) {
+  const cached = DIE_GEOMETRY_CACHE.get(sides);
+  if (cached) return cached;
 
-  // Build Three.js geometry
+  const numFaces = FACE_COUNT[sides];
+  const trisPerFace = TRIS_PER_FACE[sides];
+  const scale = SCALE[sides];
+
   let baseGeo;
   if      (sides === 4)  baseGeo = new THREE.TetrahedronGeometry(scale);
   else if (sides === 6)  baseGeo = new THREE.BoxGeometry(scale * 1.72, scale * 1.72, scale * 1.72);
@@ -174,34 +189,51 @@ export function createDie(sides, colorIndex, colorHexOverride) {
   else if (sides === 12) baseGeo = new THREE.DodecahedronGeometry(scale * 1.06);
   else                   baseGeo = new THREE.IcosahedronGeometry(scale * 1.08, 0);
 
-  // Keep indexed positions for physics hull generation (unique vertices).
   const physHullPositions = new Float32Array(baseGeo.attributes.position.array);
 
-  // Flat, non-indexed for uniform face-normal extraction
-  const geo = baseGeo.toNonIndexed();
+  const geometry = baseGeo.toNonIndexed();
   baseGeo.dispose();
 
-  // BoxGeometry carries its 6 groups through toNonIndexed(); others need manual groups
-  if (geo.groups.length === 0) {
-    addFaceGroups(geo, numFaces, trisPerFace);
+  if (geometry.groups.length === 0) {
+    addFaceGroups(geometry, numFaces, trisPerFace);
   }
 
   if (sides === 20) {
-    applyTriFaceUVs(geo, numFaces, trisPerFace);
+    applyTriFaceUVs(geometry, numFaces, trisPerFace);
   }
 
-  geo.computeVertexNormals();
+  geometry.computeVertexNormals();
 
-  // Physics vertex cloud (Float32Array) — Rapier computes convex hull from these
-  const physPositions = new Float32Array(geo.attributes.position.array);
+  const edgesGeometry = new THREE.EdgesGeometry(geometry);
+  const faceNormals = computeFaceNormals(geometry, numFaces, trisPerFace);
 
-  // Face normals in local space (value detection after settling)
-  const faceNormals = computeFaceNormals(geo, numFaces, trisPerFace);
+  const data = {
+    geometry,
+    edgesGeometry,
+    faceNormals,
+    physPositions: new Float32Array(geometry.attributes.position.array),
+    physHullPositions,
+    physRadius: scale,
+    numFaces,
+  };
+
+  DIE_GEOMETRY_CACHE.set(sides, data);
+  return data;
+}
+
+// ── Public: create a die object ──────────────────────────────────────────────
+/**
+ * Returns { mesh, faceNormals, physPositions, sides, physRadius }
+ */
+export function createDie(sides, colorIndex, colorHexOverride) {
+  const hexColor    = colorHexOverride ?? PALETTE[colorIndex % PALETTE.length];
+  const dieGeometryData = getOrCreateDieGeometryData(sides);
+  const { numFaces } = dieGeometryData;
 
   // Per-face materials with numbered canvas textures
   const materials = Array.from({ length: numFaces }, (_, i) =>
     new THREE.MeshToonMaterial({
-      map: makeNumberTexture(i + 1, hexColor, sides),
+      map: getCachedFaceTexture(i + 1, hexColor, sides),
       color: 0xffffff,
       gradientMap: TOON_GRADIENT,
       emissive: new THREE.Color(hexColor),
@@ -210,18 +242,37 @@ export function createDie(sides, colorIndex, colorHexOverride) {
     })
   );
 
-  const mesh = new THREE.Mesh(geo, materials);
+  const mesh = new THREE.Mesh(dieGeometryData.geometry, materials);
   mesh.castShadow    = false;
   mesh.receiveShadow = false;
 
   const outlines = new THREE.LineSegments(
-    new THREE.EdgesGeometry(geo),
+    dieGeometryData.edgesGeometry,
     new THREE.LineBasicMaterial({ color: 0x050505 })
   );
   outlines.renderOrder = 2;
   mesh.add(outlines);
 
-  return { mesh, faceNormals, physPositions, physHullPositions, sides, physRadius: scale };
+  return {
+    mesh,
+    faceNormals: dieGeometryData.faceNormals,
+    physPositions: dieGeometryData.physPositions,
+    physHullPositions: dieGeometryData.physHullPositions,
+    sides,
+    physRadius: dieGeometryData.physRadius,
+  };
+}
+
+export function disposeDieMesh(mesh) {
+  const mats = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+  mats.forEach((m) => m.dispose());
+
+  mesh.children.forEach((child) => {
+    if (child.material) {
+      const childMats = Array.isArray(child.material) ? child.material : [child.material];
+      childMats.forEach((m) => m.dispose());
+    }
+  });
 }
 
 // ── Public: read value from settled die ─────────────────────────────────────
@@ -230,13 +281,24 @@ export function createDie(sides, colorIndex, colorHexOverride) {
  * For d4 the "value" is conventionally the bottom face, but we read top for simplicity.
  */
 export function detectValue(faceNormals, rapierRot) {
-  const q  = new THREE.Quaternion(rapierRot.x, rapierRot.y, rapierRot.z, rapierRot.w);
-  const up = new THREE.Vector3(0, 1, 0);
+  return detectTopFaceIndex(faceNormals, rapierRot) + 1;
+}
 
-  let best = -Infinity, bestIdx = 0;
-  faceNormals.forEach((n, i) => {
-    const dot = n.clone().applyQuaternion(q).dot(up);
-    if (dot > best) { best = dot; bestIdx = i; }
-  });
-  return bestIdx + 1;
+export function detectTopFaceIndex(faceNormals, rapierRot) {
+  TEMP_ROTATION_QUAT.set(rapierRot.x, rapierRot.y, rapierRot.z, rapierRot.w);
+
+  let bestDot = -Infinity;
+  let bestIdx = 0;
+  for (let i = 0; i < faceNormals.length; i++) {
+    const dot = TEMP_ROTATED_NORMAL
+      .copy(faceNormals[i])
+      .applyQuaternion(TEMP_ROTATION_QUAT)
+      .dot(WORLD_UP);
+    if (dot > bestDot) {
+      bestDot = dot;
+      bestIdx = i;
+    }
+  }
+
+  return bestIdx;
 }
