@@ -131,13 +131,13 @@ export function initScene(container) {
   updateWallMeshes();
 
   // ── Lights ────────────────────────────────────────────────────────────────────
-  scene.add(new THREE.AmbientLight(0xffffff, 0.85));
+  scene.add(new THREE.AmbientLight(0xffffff, 1.0));
 
-  const key = new THREE.DirectionalLight(0xffffff, 1.45);
+  const key = new THREE.DirectionalLight(0xffffff, 0.35);
   key.position.set(5, 11, 6);
   scene.add(key);
 
-  const fill = new THREE.DirectionalLight(0x88aaff, 0.30);
+  const fill = new THREE.DirectionalLight(0x88aaff, 0.08);
   fill.position.set(-5, 8, -4);
   scene.add(fill);
 

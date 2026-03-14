@@ -63,19 +63,8 @@ function makeNumberTexture(number, bgHex, sides) {
   const ctx = canvas.getContext('2d');
   const shades = makeVibrantShades(bgHex);
 
-  // Full-face bg
-  const fillGrad = ctx.createLinearGradient(0, 0, S, S);
-  fillGrad.addColorStop(0, shades.hi);
-  fillGrad.addColorStop(0.55, shades.mid);
-  fillGrad.addColorStop(1, shades.lo);
-  ctx.fillStyle = fillGrad;
-  ctx.fillRect(0, 0, S, S);
-
-  // Subtle inner highlight
-  const grad = ctx.createRadialGradient(S / 2, S * 0.35, 10, S / 2, S / 2, S * 0.65);
-  grad.addColorStop(0, 'rgba(255,255,255,0.34)');
-  grad.addColorStop(1, 'rgba(0,0,0,0.22)');
-  ctx.fillStyle = grad;
+  // Flat face color (no painted highlights/shadows)
+  ctx.fillStyle = shades.mid;
   ctx.fillRect(0, 0, S, S);
 
   // Number
@@ -227,7 +216,7 @@ export function createDie(sides, colorIndex, colorHexOverride) {
       color: 0xffffff,
       gradientMap: TOON_GRADIENT,
       emissive: new THREE.Color(hexColor),
-      emissiveIntensity: 0.16,
+      emissiveIntensity: 0.04,
     })
   );
 
