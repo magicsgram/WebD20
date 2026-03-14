@@ -48,6 +48,11 @@ function isCanvasFullscreen() {
   return document.fullscreenElement === canvasContainer;
 }
 
+function setPanelHidden(hidden) {
+  document.body.classList.toggle('panel-hidden', hidden);
+  panelToggleBtn.setAttribute('aria-expanded', String(!hidden));
+}
+
 function setRollButtonState(disabled, text) {
   canvasRollBtn.disabled = disabled;
   canvasRollBtn.textContent = text;
@@ -201,8 +206,8 @@ document.addEventListener('fullscreenchange', () => {
 });
 
 panelToggleBtn.addEventListener('click', () => {
-  const hidden = document.body.classList.toggle('panel-hidden');
-  panelToggleBtn.setAttribute('aria-expanded', String(!hidden));
+  const hidden = !document.body.classList.contains('panel-hidden');
+  setPanelHidden(hidden);
 });
 
 // ── Three.js scene ───────────────────────────────────────────────────────────
@@ -238,6 +243,8 @@ function buildPhysicsWorld() {
   const wallThickness = 0.45;
   const wallHalfHeight = 8;
   const halfSize = 6.5;
+  const wallRestitution = 0.34;
+  const wallFriction = 0.18;
 
   // Floor slab
   const fb = w.createRigidBody(RAPIER.RigidBodyDesc.fixed().setTranslation(0, -0.05, 0));
@@ -252,7 +259,12 @@ function buildPhysicsWorld() {
    [0, wallHalfHeight - 0.05, halfSize, halfSize, wallHalfHeight, wallThickness],
    [0, wallHalfHeight - 0.05, -halfSize, halfSize, wallHalfHeight, wallThickness]].forEach(([x, y, z, hx, hy, hz]) => {
     const b = w.createRigidBody(RAPIER.RigidBodyDesc.fixed().setTranslation(x, y, z));
-    w.createCollider(RAPIER.ColliderDesc.cuboid(hx, hy, hz), b);
+    w.createCollider(
+      RAPIER.ColliderDesc.cuboid(hx, hy, hz)
+        .setRestitution(wallRestitution)
+        .setFriction(wallFriction),
+      b
+    );
   });
 
   const ceilingBody = w.createRigidBody(
@@ -338,7 +350,7 @@ function showResults() {
     const mats = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
     if (mats[topFaceIdx]) {
       mats[topFaceIdx].emissive           = new THREE.Color(0xffd700);
-      mats[topFaceIdx].emissiveIntensity  = 0.6;
+      mats[topFaceIdx].emissiveIntensity  = 0.28;
     }
 
     const li = document.createElement('li');
@@ -352,6 +364,8 @@ function showResults() {
 
 // ── Roll handler ─────────────────────────────────────────────────────────────
 function startRoll() {
+  setPanelHidden(true);
+
   // Tear down previous
   entities.forEach(e => {
     scene.remove(e.mesh);
