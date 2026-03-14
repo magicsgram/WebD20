@@ -2,9 +2,9 @@ import * as THREE from 'three';
 
 // One distinct base color per die slot (up to 12)
 const PALETTE = [
-  '#c0392b', '#2980b9', '#27ae60', '#e67e22',
-  '#8e44ad', '#16a085', '#d35400', '#2c3e50',
-  '#e91e63', '#00897b', '#5e35b1', '#f9a825',
+  '#a6cee3', '#1f78b4', '#b2df8a', '#33a02c',
+  '#fb9a99', '#e31a1c', '#fdbf6f', '#ff7f00',
+  '#cab2d6', '#6a3d9a', '#ffff99', '#b15928',
 ];
 
 // Polygon face counts per die type
@@ -12,47 +12,89 @@ const FACE_COUNT    = { 4: 4, 6: 6, 8: 8, 12: 12, 20: 20 };
 // How many triangles make up ONE polygon face
 const TRIS_PER_FACE = { 4: 1, 6: 2, 8: 1, 12: 3, 20: 1 };
 // Visual / physics scale
-const SCALE         = { 4: 0.72, 6: 0.68, 8: 0.74, 12: 0.70, 20: 0.74 };
+const SCALE         = { 4: 0.72, 6: 0.68, 8: 0.74, 12: 0.70, 20: 0.85 };
+
+function makeVibrantShades(hex) {
+  const base = new THREE.Color(hex);
+  const hsl = { h: 0, s: 0, l: 0 };
+  base.getHSL(hsl);
+
+  const hi = new THREE.Color().setHSL(hsl.h, Math.min(1, hsl.s * 1.30), Math.min(0.68, hsl.l + 0.14));
+  const mid = new THREE.Color().setHSL(hsl.h, Math.min(1, hsl.s * 1.36), Math.min(0.58, hsl.l + 0.06));
+  const lo = new THREE.Color().setHSL(hsl.h, Math.min(1, hsl.s * 1.20), Math.max(0.24, hsl.l - 0.16));
+
+  return {
+    hi: `#${hi.getHexString()}`,
+    mid: `#${mid.getHexString()}`,
+    lo: `#${lo.getHexString()}`,
+  };
+}
+
+const D20_UV_TOP = { x: 0.5, y: 0.30 };
+const D20_UV_LEFT = { x: 0.70, y: 0.74 };
+const D20_UV_RIGHT = { x: 0.30, y: 0.74 };
+const D20_UV_CENTER = {
+  x: (D20_UV_TOP.x + D20_UV_LEFT.x + D20_UV_RIGHT.x) / 3,
+  y: (D20_UV_TOP.y + D20_UV_LEFT.y + D20_UV_RIGHT.y) / 3,
+};
+const D20_TEXT_UV = { x: 0.5, y: 0.43 };
 
 // ── Canvas face texture ──────────────────────────────────────────────────────
-function makeNumberTexture(number, bgHex) {
+function makeNumberTexture(number, bgHex, sides) {
   const S = 256;
   const canvas = document.createElement('canvas');
   canvas.width = S; canvas.height = S;
   const ctx = canvas.getContext('2d');
+  const shades = makeVibrantShades(bgHex);
 
   // Rounded filled bg
   const pad = 12;
-  ctx.fillStyle = bgHex;
+  const fillGrad = ctx.createLinearGradient(0, 0, S, S);
+  fillGrad.addColorStop(0, shades.hi);
+  fillGrad.addColorStop(0.55, shades.mid);
+  fillGrad.addColorStop(1, shades.lo);
+  ctx.fillStyle = fillGrad;
   ctx.beginPath();
   ctx.roundRect(pad, pad, S - pad * 2, S - pad * 2, 32);
   ctx.fill();
 
   // Subtle inner highlight
   const grad = ctx.createRadialGradient(S / 2, S * 0.35, 10, S / 2, S / 2, S * 0.65);
-  grad.addColorStop(0, 'rgba(255,255,255,0.18)');
-  grad.addColorStop(1, 'rgba(0,0,0,0.18)');
+  grad.addColorStop(0, 'rgba(255,255,255,0.34)');
+  grad.addColorStop(1, 'rgba(0,0,0,0.22)');
   ctx.fillStyle = grad;
   ctx.beginPath();
   ctx.roundRect(pad, pad, S - pad * 2, S - pad * 2, 32);
   ctx.fill();
 
   // Border
-  ctx.strokeStyle = 'rgba(255,255,255,0.30)';
-  ctx.lineWidth = 7;
+  ctx.strokeStyle = 'rgba(255,255,255,0.52)';
+  ctx.lineWidth = 8;
   ctx.beginPath();
   ctx.roundRect(pad, pad, S - pad * 2, S - pad * 2, 32);
   ctx.stroke();
 
   // Number
-  const fontSize = number >= 10 ? 116 : 140;
+  const fontSize = sides === 20
+    ? (number >= 10 ? 46 : 56)
+    : (number >= 10 ? 90 : 140);
   ctx.font = `bold ${fontSize}px Arial, sans-serif`;
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
-  ctx.fillStyle = 'rgba(0,0,0,0.45)';
-  ctx.fillText(String(number), S / 2 + 3, S / 2 + 5);
-  ctx.fillStyle = '#ffffff';
-  ctx.fillText(String(number), S / 2, S / 2);
+  const textX = sides === 20 ? S * D20_TEXT_UV.x : S / 2;
+  const textY = sides === 20 ? S * D20_TEXT_UV.y : S / 2;
+  ctx.fillStyle = '#0a0a0a';
+  ctx.fillText(String(number), textX, textY);
+
+  if (number === 6 || number === 9) {
+    const dotRadius = sides === 20 ? 6 : 10;
+    const dotX = sides === 20 ? textX + 14 : S * 0.75;
+    const dotY = sides === 20 ? textY + 13 : S * 0.77;
+    ctx.fillStyle = '#0a0a0a';
+    ctx.beginPath();
+    ctx.arc(dotX, dotY, dotRadius, 0, Math.PI * 2);
+    ctx.fill();
+  }
 
   const tex = new THREE.CanvasTexture(canvas);
   tex.colorSpace = THREE.SRGBColorSpace;
@@ -65,6 +107,19 @@ function addFaceGroups(geometry, numFaces, trisPerFace) {
   for (let f = 0; f < numFaces; f++) {
     geometry.addGroup(f * vpf, vpf, f);
   }
+}
+
+function applyTriFaceUVs(geometry, numFaces, trisPerFace) {
+  if (trisPerFace !== 1 || !geometry.attributes.uv) return;
+
+  const uv = geometry.attributes.uv;
+  for (let f = 0; f < numFaces; f++) {
+    const base = f * 3;
+    uv.setXY(base, D20_UV_TOP.x, D20_UV_TOP.y);
+    uv.setXY(base + 1, D20_UV_LEFT.x, D20_UV_LEFT.y);
+    uv.setXY(base + 2, D20_UV_RIGHT.x, D20_UV_RIGHT.y);
+  }
+  uv.needsUpdate = true;
 }
 
 // ── Compute outward face normals used for value detection ────────────────────
@@ -95,11 +150,11 @@ function computeFaceNormals(geometry, numFaces, trisPerFace) {
 /**
  * Returns { mesh, faceNormals, physPositions, sides, physRadius }
  */
-export function createDie(sides, colorIndex) {
+export function createDie(sides, colorIndex, colorHexOverride) {
   const numFaces    = FACE_COUNT[sides];
   const trisPerFace = TRIS_PER_FACE[sides];
   const scale       = SCALE[sides];
-  const hexColor    = PALETTE[colorIndex % PALETTE.length];
+  const hexColor    = colorHexOverride ?? PALETTE[colorIndex % PALETTE.length];
 
   // Build Three.js geometry
   let baseGeo;
@@ -120,6 +175,11 @@ export function createDie(sides, colorIndex) {
   if (geo.groups.length === 0) {
     addFaceGroups(geo, numFaces, trisPerFace);
   }
+
+  if (sides === 20) {
+    applyTriFaceUVs(geo, numFaces, trisPerFace);
+  }
+
   geo.computeVertexNormals();
 
   // Physics vertex cloud (Float32Array) — Rapier computes convex hull from these
@@ -130,17 +190,18 @@ export function createDie(sides, colorIndex) {
 
   // Per-face materials with numbered canvas textures
   const materials = Array.from({ length: numFaces }, (_, i) =>
-    new THREE.MeshStandardMaterial({
-      map: makeNumberTexture(i + 1, hexColor),
-      roughness: 0.28,
-      metalness: 0.06,
+    new THREE.MeshLambertMaterial({
+      map: makeNumberTexture(i + 1, hexColor, sides),
+      color: 0xffffff,
+      emissive: new THREE.Color(hexColor),
+      emissiveIntensity: 0.2,
       flatShading: true,
     })
   );
 
   const mesh = new THREE.Mesh(geo, materials);
-  mesh.castShadow    = true;
-  mesh.receiveShadow = true;
+  mesh.castShadow    = false;
+  mesh.receiveShadow = false;
 
   return { mesh, faceNormals, physPositions, physHullPositions, sides, physRadius: scale };
 }

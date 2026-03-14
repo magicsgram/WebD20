@@ -188,6 +188,14 @@ button#roll-btn:disabled {
   padding: 0.3rem 0.4rem;
 }
 
+.die-config .die-type-select {
+  margin-bottom: 0.3rem;
+}
+
+.die-config .die-color-select {
+  margin-bottom: 0;
+}
+
 /* ── Results ─────────────────────────────────────────────────────────────── */
 .results-panel {
   flex: 1;

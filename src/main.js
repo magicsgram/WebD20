@@ -14,6 +14,31 @@ const resultsList     = document.querySelector('#results-list');
 const totalEl         = document.querySelector('#total');
 const canvasContainer = document.querySelector('#canvas-container');
 
+const COLOR_PALETTE = [
+  '#a6cee3', '#1f78b4', '#b2df8a', '#33a02c',
+  '#fb9a99', '#e31a1c', '#fdbf6f', '#ff7f00',
+  '#cab2d6', '#6a3d9a', '#ffff99', '#b15928',
+];
+
+let dieColors = [];
+
+function getContrastTextColor(hex) {
+  const r = parseInt(hex.slice(1, 3), 16);
+  const g = parseInt(hex.slice(3, 5), 16);
+  const b = parseInt(hex.slice(5, 7), 16);
+  const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+  return luminance > 0.62 ? '#111111' : '#f8fafc';
+}
+
+function shuffledColorsForCount(count) {
+  const pool = [...COLOR_PALETTE];
+  for (let i = pool.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [pool[i], pool[j]] = [pool[j], pool[i]];
+  }
+  return pool.slice(0, count);
+}
+
 // ── Dice count selector ──────────────────────────────────────────────────────
 for (let i = 1; i <= 12; i++) {
   const o = document.createElement('option');
@@ -24,7 +49,18 @@ for (let i = 1; i <= 12; i++) {
 
 function renderDiceSelectors() {
   const count = Number(diceCountSelect.value);
+  dieColors = shuffledColorsForCount(count);
   diceConfigs.innerHTML = '';
+
+  const colorOptions = COLOR_PALETTE.map((hex, idx) => {
+    const option = document.createElement('option');
+    option.value = hex;
+    option.textContent = '';
+    option.style.backgroundColor = hex;
+    option.style.color = getContrastTextColor(hex);
+    return option;
+  });
+
   for (let i = 0; i < count; i++) {
     const wrapper = document.createElement('div');
     wrapper.className = 'die-config';
@@ -36,6 +72,7 @@ function renderDiceSelectors() {
     const select = document.createElement('select');
     select.id = `die-type-${i}`;
     select.dataset.dieType = 'true';
+    select.className = 'die-type-select';
 
     [6, 20].forEach(faces => {
       const o = document.createElement('option');
@@ -44,7 +81,30 @@ function renderDiceSelectors() {
       select.appendChild(o);
     });
 
-    wrapper.append(label, select);
+    const colorLabel = document.createElement('label');
+    colorLabel.setAttribute('for', `die-color-${i}`);
+    colorLabel.textContent = '';
+
+    const colorSelect = document.createElement('select');
+    colorSelect.id = `die-color-${i}`;
+    colorSelect.dataset.dieColor = 'true';
+    colorSelect.className = 'die-color-select';
+    colorOptions.forEach((option) => colorSelect.appendChild(option.cloneNode(true)));
+    colorSelect.value = dieColors[i];
+
+    const applyColorSelectStyle = () => {
+      const selectedHex = colorSelect.value;
+      colorSelect.style.backgroundColor = selectedHex;
+      colorSelect.style.color = getContrastTextColor(selectedHex);
+    };
+
+    colorSelect.addEventListener('change', () => {
+      dieColors[i] = colorSelect.value;
+      applyColorSelectStyle();
+    });
+    applyColorSelectStyle();
+
+    wrapper.append(label, select, colorLabel, colorSelect);
     diceConfigs.appendChild(wrapper);
   }
 }
@@ -91,17 +151,18 @@ const DICE_PHYSICS = {
 function buildPhysicsWorld() {
   const w = new RAPIER.World({ x: 0, y: -9.81, z: 0 });
 
+  const wallThickness = 0.45;
+  const wallHalfHeight = 8;
+  const halfSize = 6.5;
+
   // Floor slab
   const fb = w.createRigidBody(RAPIER.RigidBodyDesc.fixed().setTranslation(0, -0.05, 0));
   w.createCollider(
-    RAPIER.ColliderDesc.cuboid(5.5, 0.1, 5.5).setRestitution(0.12).setFriction(0.82),
+    RAPIER.ColliderDesc.cuboid(halfSize, 0.1, halfSize).setRestitution(0.12).setFriction(0.82),
     fb
   );
 
   // Four walls (X+, X-, Z+, Z-) + invisible ceiling
-  const wallThickness = 0.45;
-  const wallHalfHeight = 8;
-  const halfSize = 4.95;
   [[ halfSize, wallHalfHeight - 0.05, 0, wallThickness, wallHalfHeight, halfSize],
    [-halfSize, wallHalfHeight - 0.05, 0, wallThickness, wallHalfHeight, halfSize],
    [0, wallHalfHeight - 0.05, halfSize, halfSize, wallHalfHeight, wallThickness],
@@ -232,7 +293,7 @@ function startRoll() {
   rollBtn.textContent = 'Rolling…';
 
   selectedDice.forEach((sides, i) => {
-    const dieObj = createDie(sides, i);
+    const dieObj = createDie(sides, i, dieColors[i]);
     const body   = spawnDie(world, dieObj, i, selectedDice.length);
     scene.add(dieObj.mesh);
     entities.push({ body, mesh: dieObj.mesh, faceNormals: dieObj.faceNormals, sides });
@@ -240,6 +301,18 @@ function startRoll() {
 }
 
 rollBtn.addEventListener('click', startRoll);
+
+window.addEventListener('keydown', (event) => {
+  if (event.code !== 'Space' || event.repeat || rollBtn.disabled) return;
+
+  const active = document.activeElement;
+  const tag = active?.tagName;
+  const inFormControl = tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT';
+  if (inFormControl) return;
+
+  event.preventDefault();
+  startRoll();
+});
 
 // ── Render / animation loop ───────────────────────────────────────────────────
 function animate() {
