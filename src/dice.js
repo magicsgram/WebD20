@@ -63,32 +63,20 @@ function makeNumberTexture(number, bgHex, sides) {
   const ctx = canvas.getContext('2d');
   const shades = makeVibrantShades(bgHex);
 
-  // Rounded filled bg
-  const pad = 12;
+  // Full-face bg
   const fillGrad = ctx.createLinearGradient(0, 0, S, S);
   fillGrad.addColorStop(0, shades.hi);
   fillGrad.addColorStop(0.55, shades.mid);
   fillGrad.addColorStop(1, shades.lo);
   ctx.fillStyle = fillGrad;
-  ctx.beginPath();
-  ctx.roundRect(pad, pad, S - pad * 2, S - pad * 2, 32);
-  ctx.fill();
+  ctx.fillRect(0, 0, S, S);
 
   // Subtle inner highlight
   const grad = ctx.createRadialGradient(S / 2, S * 0.35, 10, S / 2, S / 2, S * 0.65);
   grad.addColorStop(0, 'rgba(255,255,255,0.34)');
   grad.addColorStop(1, 'rgba(0,0,0,0.22)');
   ctx.fillStyle = grad;
-  ctx.beginPath();
-  ctx.roundRect(pad, pad, S - pad * 2, S - pad * 2, 32);
-  ctx.fill();
-
-  // Border
-  ctx.strokeStyle = 'rgba(255,255,255,0.52)';
-  ctx.lineWidth = 8;
-  ctx.beginPath();
-  ctx.roundRect(pad, pad, S - pad * 2, S - pad * 2, 32);
-  ctx.stroke();
+  ctx.fillRect(0, 0, S, S);
 
   // Number
   const fontSize = sides === 20
@@ -114,7 +102,9 @@ function makeNumberTexture(number, bgHex, sides) {
 
   const tex = new THREE.CanvasTexture(canvas);
   tex.colorSpace = THREE.SRGBColorSpace;
-  tex.generateMipmaps = true;
+  tex.generateMipmaps = sides !== 20;
+  tex.minFilter = sides === 20 ? THREE.LinearFilter : THREE.LinearMipmapLinearFilter;
+  tex.magFilter = THREE.LinearFilter;
   tex.anisotropy = 1;
   return tex;
 }
@@ -244,13 +234,6 @@ export function createDie(sides, colorIndex, colorHexOverride) {
   const mesh = new THREE.Mesh(dieGeometryData.geometry, materials);
   mesh.castShadow    = false;
   mesh.receiveShadow = false;
-
-  const outlines = new THREE.LineSegments(
-    dieGeometryData.edgesGeometry,
-    new THREE.LineBasicMaterial({ color: 0x050505 })
-  );
-  outlines.renderOrder = 2;
-  mesh.add(outlines);
 
   return {
     mesh,
