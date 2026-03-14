@@ -360,8 +360,6 @@ function showResults() {
 
 // ── Roll handler ─────────────────────────────────────────────────────────────
 function startRoll() {
-  setPanelHidden(true);
-
   // Tear down previous
   entities.forEach(e => {
     scene.remove(e.mesh);

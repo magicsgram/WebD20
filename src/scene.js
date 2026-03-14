@@ -24,9 +24,25 @@ export function initScene(container) {
   scene.fog = new THREE.FogExp2(0x000000, 0.028);
 
   // ── Camera ───────────────────────────────────────────────────────────────────
-  const camera = new THREE.PerspectiveCamera(52, w / h, 0.1, 100);
-  camera.position.set(0, 16, 10);
-  camera.lookAt(0, 0, 0);
+  const camera = new THREE.PerspectiveCamera(52, w / h, 0.1, 140);
+  const trayHalfSize = 6.5;
+  const trayFitRadius = trayHalfSize * Math.SQRT2 * 1.06;
+  const trayTarget = new THREE.Vector3(0, 0, 0);
+  const baseDirection = new THREE.Vector3(0, 16, 10).normalize();
+
+  function updateCameraToFitTray(width, height) {
+    const safeHeight = Math.max(1, height);
+    const aspect = width / safeHeight;
+    const vFov = THREE.MathUtils.degToRad(camera.fov);
+    const hFov = 2 * Math.atan(Math.tan(vFov / 2) * aspect);
+    const limitingHalfFov = Math.min(vFov, hFov) / 2;
+    const distance = trayFitRadius / Math.sin(limitingHalfFov);
+
+    camera.position.copy(baseDirection).multiplyScalar(distance).add(trayTarget);
+    camera.lookAt(trayTarget);
+  }
+
+  updateCameraToFitTray(w, h);
 
   // ── Lights ────────────────────────────────────────────────────────────────────
   scene.add(new THREE.AmbientLight(0xffffff, 0.85));
@@ -46,6 +62,7 @@ export function initScene(container) {
     const nh = r2.height > 10 ? r2.height : (window.innerHeight - 52);
     renderer.setSize(nw, nh);
     camera.aspect = nw / nh;
+    updateCameraToFitTray(nw, nh);
     camera.updateProjectionMatrix();
   }).observe(container);
 
