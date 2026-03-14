@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Rapier 3D Dice Roller</title>
+    <script type="module" src="/src/main.js"></script>
+  </head>
+  <body>
+    <header class="app-header">
+      <h1>Rapier 3D Dice Roller</h1>
+    </header>
+
+    <div class="layout">
+      <!-- 3D viewport -->
+      <div id="canvas-container" aria-label="3D dice viewport"></div>
+
+      <!-- Side panel -->
+      <aside class="side-panel">
+        <section class="panel">
+          <label for="dice-count">Number of dice</label>
+          <div class="count-row">
+            <select id="dice-count" aria-label="Number of dice"></select>
+            <button id="set-all-d6" class="quick-btn" type="button">All d6</button>
+            <button id="set-all-d20" class="quick-btn" type="button">All d20</button>
+          </div>
+
+          <div id="dice-configs" class="dice-configs"></div>
+
+          <button id="roll-btn" type="button">Roll</button>
+        </section>
+
+        <section class="panel results-panel" aria-live="polite">
+          <h2>Results</h2>
+          <ul id="results-list"></ul>
+          <p id="total"></p>
+        </section>
+      </aside>
+    </div>
+  </body>
+</html>
