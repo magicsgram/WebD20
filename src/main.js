@@ -9,8 +9,6 @@ const diceCountSelect = document.querySelector('#dice-count');
 const diceConfigs     = document.querySelector('#dice-configs');
 const setAllD6Btn     = document.querySelector('#set-all-d6');
 const setAllD20Btn    = document.querySelector('#set-all-d20');
-const resultsList     = document.querySelector('#results-list');
-const totalEl         = document.querySelector('#total');
 const canvasContainer = document.querySelector('#canvas-container');
 
 const panelToggleBtn = document.createElement('button');
@@ -110,7 +108,7 @@ function renderDiceSelectors() {
   dieColors = shuffledColorsForCount(count);
   diceConfigs.innerHTML = '';
 
-  const colorOptions = COLOR_PALETTE.map((hex, idx) => {
+  const colorOptions = COLOR_PALETTE.map((hex) => {
     const option = document.createElement('option');
     option.value = hex;
     option.textContent = '';
@@ -353,8 +351,6 @@ function showResults() {
       mats[topFaceIdx].emissiveIntensity  = 0.28;
     }
 
-    const li = document.createElement('li');
-    li.textContent = `Die ${i + 1} (d${sides}): ${value}`;
     valueItems.push(`D${i + 1}: ${value}`);
   });
 
