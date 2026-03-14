@@ -3,6 +3,7 @@
   font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
   line-height: 1.4;
   color: #e8ecf1;
+  --panel-blade-width: 300px;
 }
 
 * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -58,7 +59,7 @@ body {
 }
 
 .canvas-menu-btn {
-  position: absolute;
+  position: fixed;
   top: 0.7rem;
   left: 0.7rem;
   width: 2rem;
@@ -126,12 +127,13 @@ body {
   position: absolute;
   top: 0;
   left: 0;
-  width: 300px;
+  width: var(--panel-blade-width);
   height: 100%;
   z-index: 20;
   display: flex;
   flex-direction: column;
   gap: 0;
+  padding-top: 3.2rem;
   overflow-y: auto;
   border-right: 1px solid #1e3528;
   background: rgba(8, 16, 10, 0.94);
@@ -287,8 +289,11 @@ select:focus {
 
 /* ── Narrow screens ─────────────────────────────────────────────────────── */
 @media (max-width: 720px) {
+  :root {
+    --panel-blade-width: min(300px, 85vw);
+  }
+
   .side-panel {
-    width: min(300px, 85vw);
     -webkit-overflow-scrolling: touch;
   }
 }
