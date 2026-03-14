@@ -9,10 +9,31 @@ const diceCountSelect = document.querySelector('#dice-count');
 const diceConfigs     = document.querySelector('#dice-configs');
 const setAllD6Btn     = document.querySelector('#set-all-d6');
 const setAllD20Btn    = document.querySelector('#set-all-d20');
-const rollBtn         = document.querySelector('#roll-btn');
 const resultsList     = document.querySelector('#results-list');
 const totalEl         = document.querySelector('#total');
 const canvasContainer = document.querySelector('#canvas-container');
+
+const panelToggleBtn = document.createElement('button');
+panelToggleBtn.type = 'button';
+panelToggleBtn.className = 'canvas-overlay-btn canvas-menu-btn';
+panelToggleBtn.textContent = '☰';
+panelToggleBtn.setAttribute('aria-label', 'Toggle settings panel');
+panelToggleBtn.setAttribute('aria-expanded', 'true');
+
+const fullscreenBtn = document.createElement('button');
+fullscreenBtn.type = 'button';
+fullscreenBtn.className = 'canvas-overlay-btn canvas-fs-btn';
+fullscreenBtn.textContent = 'Fullscreen';
+
+const canvasRollBtn = document.createElement('button');
+canvasRollBtn.type = 'button';
+canvasRollBtn.className = 'canvas-overlay-btn canvas-roll-btn';
+canvasRollBtn.textContent = 'Roll';
+
+const canvasResultPopup = document.createElement('div');
+canvasResultPopup.className = 'canvas-result-popup';
+
+canvasContainer.append(panelToggleBtn, fullscreenBtn, canvasRollBtn, canvasResultPopup);
 
 const COLOR_PALETTE = [
   '#a6cee3', '#1f78b4', '#b2df8a', '#33a02c',
@@ -21,6 +42,34 @@ const COLOR_PALETTE = [
 ];
 
 let dieColors = [];
+let popupTimer = null;
+
+function isCanvasFullscreen() {
+  return document.fullscreenElement === canvasContainer;
+}
+
+function setRollButtonState(disabled, text) {
+  canvasRollBtn.disabled = disabled;
+  canvasRollBtn.textContent = text;
+}
+
+function hideCanvasResultPopup() {
+  canvasResultPopup.classList.remove('show');
+  canvasResultPopup.innerHTML = '';
+}
+
+function showCanvasResultPopup(total, values) {
+  const lines = values
+    .map((entry) => `<div class="canvas-result-line">${entry}</div>`)
+    .join('');
+  canvasResultPopup.innerHTML = `<div class="canvas-result-total">Total: ${total}</div>${lines}`;
+  canvasResultPopup.classList.add('show');
+  if (popupTimer) clearTimeout(popupTimer);
+  popupTimer = setTimeout(() => {
+    hideCanvasResultPopup();
+    popupTimer = null;
+  }, 2800);
+}
 
 function getContrastTextColor(hex) {
   const r = parseInt(hex.slice(1, 3), 16);
@@ -31,19 +80,23 @@ function getContrastTextColor(hex) {
 }
 
 function shuffledColorsForCount(count) {
-  const pool = [...COLOR_PALETTE];
-  for (let i = pool.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [pool[i], pool[j]] = [pool[j], pool[i]];
+  const colors = [];
+  while (colors.length < count) {
+    const pool = [...COLOR_PALETTE];
+    for (let i = pool.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [pool[i], pool[j]] = [pool[j], pool[i]];
+    }
+    colors.push(...pool);
   }
-  return pool.slice(0, count);
+  return colors.slice(0, count);
 }
 
 // ── Dice count selector ──────────────────────────────────────────────────────
-for (let i = 1; i <= 12; i++) {
+for (let i = 1; i <= 20; i++) {
   const o = document.createElement('option');
   o.value = String(i); o.textContent = String(i);
-  if (i === 3) o.selected = true;
+  if (i === 2) o.selected = true;
   diceCountSelect.appendChild(o);
 }
 
@@ -77,13 +130,9 @@ function renderDiceSelectors() {
     [6, 20].forEach(faces => {
       const o = document.createElement('option');
       o.value = String(faces); o.textContent = `d${faces}`;
-      if (faces === 20) o.selected = true;
+      if (faces === 6) o.selected = true;
       select.appendChild(o);
     });
-
-    const colorLabel = document.createElement('label');
-    colorLabel.setAttribute('for', `die-color-${i}`);
-    colorLabel.textContent = '';
 
     const colorSelect = document.createElement('select');
     colorSelect.id = `die-color-${i}`;
@@ -104,7 +153,11 @@ function renderDiceSelectors() {
     });
     applyColorSelectStyle();
 
-    wrapper.append(label, select, colorLabel, colorSelect);
+    const controls = document.createElement('div');
+    controls.className = 'die-controls';
+    controls.append(select, colorSelect);
+
+    wrapper.append(label, controls);
     diceConfigs.appendChild(wrapper);
   }
 }
@@ -120,6 +173,37 @@ diceCountSelect.addEventListener('change', renderDiceSelectors);
 setAllD6Btn.addEventListener('click', () => setAllDiceTypes(6));
 setAllD20Btn.addEventListener('click', () => setAllDiceTypes(20));
 renderDiceSelectors();
+
+setRollButtonState(false, 'Roll');
+
+fullscreenBtn.addEventListener('click', async () => {
+  try {
+    if (isCanvasFullscreen()) {
+      await document.exitFullscreen();
+    } else {
+      await canvasContainer.requestFullscreen();
+    }
+  } catch {
+  }
+});
+
+canvasRollBtn.addEventListener('click', () => {
+  if (!canvasRollBtn.disabled) startRoll();
+});
+
+document.addEventListener('fullscreenchange', () => {
+  const active = isCanvasFullscreen();
+  canvasContainer.classList.toggle('is-fullscreen', active);
+  fullscreenBtn.textContent = active ? 'Exit Fullscreen' : 'Fullscreen';
+  if (!active) {
+    hideCanvasResultPopup();
+  }
+});
+
+panelToggleBtn.addEventListener('click', () => {
+  const hidden = document.body.classList.toggle('panel-hidden');
+  panelToggleBtn.setAttribute('aria-expanded', String(!hidden));
+});
 
 // ── Three.js scene ───────────────────────────────────────────────────────────
 const { scene, camera, renderer } = initScene(canvasContainer);
@@ -235,8 +319,8 @@ function spawnDie(physWorld, dieObj, index, total) {
 
 // ── Show face-detected results ────────────────────────────────────────────────
 function showResults() {
-  resultsList.innerHTML = '';
   let sum = 0;
+  const valueItems = [];
 
   entities.forEach(({ body, mesh, faceNormals, sides }, i) => {
     const value = detectValue(faceNormals, body.rotation());
@@ -259,12 +343,11 @@ function showResults() {
 
     const li = document.createElement('li');
     li.textContent = `Die ${i + 1} (d${sides}): ${value}`;
-    resultsList.appendChild(li);
+    valueItems.push(`D${i + 1}: ${value}`);
   });
 
-  totalEl.textContent   = `Total: ${sum}`;
-  rollBtn.disabled      = false;
-  rollBtn.textContent   = 'Roll Again';
+  setRollButtonState(false, 'Roll Again');
+  showCanvasResultPopup(sum, valueItems);
 }
 
 // ── Roll handler ─────────────────────────────────────────────────────────────
@@ -277,8 +360,7 @@ function startRoll() {
       .forEach(m => { if (m.map) m.map.dispose(); m.dispose(); });
   });
   entities = [];
-  resultsList.innerHTML = '';
-  totalEl.textContent   = '';
+  hideCanvasResultPopup();
   if (world) { world.free(); world = null; }
 
   const selectedDice = Array.from(
@@ -289,8 +371,7 @@ function startRoll() {
   stepCount  = 0;
   stableFrames = 0;
   simActive  = true;
-  rollBtn.disabled    = true;
-  rollBtn.textContent = 'Rolling…';
+  setRollButtonState(true, 'Rolling…');
 
   selectedDice.forEach((sides, i) => {
     const dieObj = createDie(sides, i, dieColors[i]);
@@ -300,10 +381,8 @@ function startRoll() {
   });
 }
 
-rollBtn.addEventListener('click', startRoll);
-
 window.addEventListener('keydown', (event) => {
-  if (event.code !== 'Space' || event.repeat || rollBtn.disabled) return;
+  if (event.code !== 'Space' || event.repeat || canvasRollBtn.disabled) return;
 
   const active = document.activeElement;
   const tag = active?.tagName;

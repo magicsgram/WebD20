@@ -29,11 +29,15 @@ export function initScene(container) {
   camera.lookAt(0, 0, 0);
 
   // ── Lights ────────────────────────────────────────────────────────────────────
-  scene.add(new THREE.AmbientLight(0xffffff, 1.35));
+  scene.add(new THREE.AmbientLight(0xffffff, 0.85));
 
-  const key = new THREE.DirectionalLight(0xffffff, 0.85);
-  key.position.set(4, 12, 6);
+  const key = new THREE.DirectionalLight(0xffffff, 1.45);
+  key.position.set(5, 11, 6);
   scene.add(key);
+
+  const fill = new THREE.DirectionalLight(0x88aaff, 0.30);
+  fill.position.set(-5, 8, -4);
+  scene.add(fill);
 
   // ── Resize ───────────────────────────────────────────────────────────────────
   new ResizeObserver(() => {

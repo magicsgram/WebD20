@@ -37,7 +37,17 @@ const D20_UV_CENTER = {
   x: (D20_UV_TOP.x + D20_UV_LEFT.x + D20_UV_RIGHT.x) / 3,
   y: (D20_UV_TOP.y + D20_UV_LEFT.y + D20_UV_RIGHT.y) / 3,
 };
-const D20_TEXT_UV = { x: 0.5, y: 0.43 };
+const D20_TEXT_UV = { x: 0.5, y: 0.41 };
+
+const TOON_GRADIENT = (() => {
+  const data = new Uint8Array([24, 92, 168, 255]);
+  const tex = new THREE.DataTexture(data, 4, 1, THREE.RedFormat);
+  tex.needsUpdate = true;
+  tex.minFilter = THREE.NearestFilter;
+  tex.magFilter = THREE.NearestFilter;
+  tex.generateMipmaps = false;
+  return tex;
+})();
 
 // ── Canvas face texture ──────────────────────────────────────────────────────
 function makeNumberTexture(number, bgHex, sides) {
@@ -88,8 +98,8 @@ function makeNumberTexture(number, bgHex, sides) {
 
   if (number === 6 || number === 9) {
     const dotRadius = sides === 20 ? 6 : 10;
-    const dotX = sides === 20 ? textX + 14 : S * 0.75;
-    const dotY = sides === 20 ? textY + 13 : S * 0.77;
+    const dotX = sides === 20 ? textX + 18 : S * 0.80;
+    const dotY = sides === 20 ? textY + 17 : S * 0.82;
     ctx.fillStyle = '#0a0a0a';
     ctx.beginPath();
     ctx.arc(dotX, dotY, dotRadius, 0, Math.PI * 2);
@@ -190,11 +200,12 @@ export function createDie(sides, colorIndex, colorHexOverride) {
 
   // Per-face materials with numbered canvas textures
   const materials = Array.from({ length: numFaces }, (_, i) =>
-    new THREE.MeshLambertMaterial({
+    new THREE.MeshToonMaterial({
       map: makeNumberTexture(i + 1, hexColor, sides),
       color: 0xffffff,
+      gradientMap: TOON_GRADIENT,
       emissive: new THREE.Color(hexColor),
-      emissiveIntensity: 0.2,
+      emissiveIntensity: 0.16,
       flatShading: true,
     })
   );
@@ -202,6 +213,13 @@ export function createDie(sides, colorIndex, colorHexOverride) {
   const mesh = new THREE.Mesh(geo, materials);
   mesh.castShadow    = false;
   mesh.receiveShadow = false;
+
+  const outlines = new THREE.LineSegments(
+    new THREE.EdgesGeometry(geo),
+    new THREE.LineBasicMaterial({ color: 0x050505 })
+  );
+  outlines.renderOrder = 2;
+  mesh.add(outlines);
 
   return { mesh, faceNormals, physPositions, physHullPositions, sides, physRadius: scale };
 }
