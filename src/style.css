@@ -32,6 +32,38 @@ body {
   overflow: hidden;
 }
 
+.canvas-reroll-flash {
+  position: absolute;
+  left: 50%;
+  top: 38%;
+  transform: translate(-50%, -50%);
+  z-index: 35;
+  pointer-events: none;
+  font-size: 2rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #f8fafc;
+  padding: 0.2rem 0.55rem;
+  border-radius: 0.5rem;
+  background: rgba(0, 0, 0, 0.58);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  backdrop-filter: blur(2px);
+  -webkit-backdrop-filter: blur(2px);
+  text-shadow: 0 0 10px rgba(255, 255, 255, 0.6), 0 0 28px rgba(255, 255, 255, 0.42);
+  opacity: 0;
+}
+
+.canvas-reroll-flash.show {
+  animation: reroll-popup-flash 2s ease-out;
+}
+
+@keyframes reroll-popup-flash {
+  0% { opacity: 0; transform: translate(-50%, -47%) scale(0.92); }
+  30% { opacity: 1; transform: translate(-50%, -50%) scale(1.03); }
+  100% { opacity: 0; transform: translate(-50%, -53%) scale(1.0); }
+}
+
 #canvas-container canvas {
   display: block;
   position: absolute;

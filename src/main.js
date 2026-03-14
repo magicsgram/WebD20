@@ -1,5 +1,5 @@
 import RAPIER from '@dimforge/rapier3d';
-import { createDie, detectTopFaceIndex, disposeDieMesh } from './dice.js';
+import { createDie, detectTopFace, disposeDieMesh } from './dice.js';
 import { initScene } from './scene.js';
 import './style.css';
 
@@ -9,6 +9,7 @@ const diceConfigs     = document.querySelector('#dice-configs');
 const setAllD6Btn     = document.querySelector('#set-all-d6');
 const setAllD20Btn    = document.querySelector('#set-all-d20');
 const canvasContainer = document.querySelector('#canvas-container');
+const sidePanel       = document.querySelector('.side-panel');
 
 const panelToggleBtn = document.createElement('button');
 panelToggleBtn.type = 'button';
@@ -25,7 +26,15 @@ fullscreenBtn.textContent = 'Fullscreen';
 const canvasResultPopup = document.createElement('div');
 canvasResultPopup.className = 'canvas-result-popup';
 
+const relandFlashPopup = document.createElement('div');
+relandFlashPopup.className = 'canvas-reroll-flash';
+relandFlashPopup.textContent = 'Re-roll';
+
+if (sidePanel) {
+  canvasContainer.append(sidePanel);
+}
 canvasContainer.append(panelToggleBtn, fullscreenBtn, canvasResultPopup);
+canvasContainer.append(relandFlashPopup);
 
 const COLOR_PALETTE = [
   '#a6cee3', '#1f78b4', '#b2df8a', '#33a02c',
@@ -36,6 +45,7 @@ const COLOR_PALETTE = [
 let dieColors = [];
 let popupTimer = null;
 let rollInputLocked = false;
+let relandFlashTimer = null;
 
 function isCanvasFullscreen() {
   return document.fullscreenElement === canvasContainer;
@@ -75,6 +85,22 @@ function hideCanvasResultPopup() {
   canvasResultPopup.innerHTML = '';
 }
 
+function triggerRelandFlash() {
+  if (relandFlashTimer) {
+    clearTimeout(relandFlashTimer);
+    relandFlashTimer = null;
+  }
+
+  relandFlashPopup.classList.remove('show');
+  void relandFlashPopup.offsetWidth;
+  relandFlashPopup.classList.add('show');
+
+  relandFlashTimer = setTimeout(() => {
+    relandFlashPopup.classList.remove('show');
+    relandFlashTimer = null;
+  }, 2000);
+}
+
 function showCanvasResultPopup(total, values) {
   const lines = values
     .map((entry) => `<div class="canvas-result-line">${entry}</div>`)
@@ -107,8 +133,8 @@ function shuffledColorsForCount(count) {
 function getTrayScaleForDiceCount(count) {
   const minDice = 1;
   const maxDice = 20;
-  const minScale = 0.6;
-  const maxScale = 1.25;
+  const minScale = 0.5;
+  const maxScale = 1.5;
   const clamped = Math.min(maxDice, Math.max(minDice, count));
   const progress = (clamped - minDice) / (maxDice - minDice);
   return minScale + (maxScale - minScale) * progress;
@@ -230,7 +256,7 @@ fullscreenBtn.addEventListener('click', async () => {
 canvasContainer.addEventListener('click', (event) => {
   const target = event.target;
   if (!(target instanceof Element)) return;
-  if (target.closest('.canvas-overlay-btn') || target.closest('.canvas-result-popup')) return;
+  if (target.closest('.canvas-overlay-btn') || target.closest('.canvas-result-popup') || target.closest('.side-panel')) return;
   tryStartRoll({ forceRestart: true });
 });
 
@@ -260,11 +286,13 @@ setTrayHalfSize(getTrayHalfSizeForDiceCount(Number(diceCountSelect.value)));
 
 // ── Simulation state ─────────────────────────────────────────────────────────
 let world     = null;
-let entities  = []; // { body, mesh, faceNormals, sides }
+let entities  = []; // { body, mesh, faceNormals, sides, physRadius }
 let simActive = false;
 let stepCount = 0;
 let stableFrames = 0;
-const MAX_STEPS = 550;
+let relandAttempts = 0;
+const MAX_STEPS = 450;
+const MAX_RELAND_ATTEMPTS = 8;
 const MIN_STABLE_FRAMES = 24;
 const MIN_ROLL_STEPS = 70;
 const LINEAR_STOP_SPEED = 0.08;
@@ -273,6 +301,16 @@ const VERTICAL_STOP_SPEED = 0.07;
 const SETTLE_HEIGHT = 1.25;
 const LINEAR_STOP_SPEED_SQ = LINEAR_STOP_SPEED * LINEAR_STOP_SPEED;
 const ANGULAR_STOP_SPEED_SQ = ANGULAR_STOP_SPEED * ANGULAR_STOP_SPEED;
+const FACE_LAND_ALIGNMENT_MIN = 0.90;
+const SURFACE_LAND_HEIGHT_FACTOR = 1.14;
+const SURFACE_LAND_HEIGHT_MIN = 0.78;
+const RELAND_VERTICAL_LIFT = 1.0;
+const RELAND_UPWARD_IMPULSE_BASE = 30.0;
+const RELAND_UPWARD_IMPULSE_STEP = 0.9;
+const RELAND_LATERAL_IMPULSE = 3.5;
+const RELAND_TORQUE_IMPULSE = 4.8;
+const RELAND_TILT_MIN_DEG = 15;
+const RELAND_TILT_MAX_DEG = 30;
 
 // ── Shared dice physics config (applies to both d6 and d20) ─────────────────
 const DICE_PHYSICS = {
@@ -384,14 +422,14 @@ function spawnDie(physWorld, dieObj, index, total) {
 }
 
 // ── Show face-detected results ────────────────────────────────────────────────
-function showResults() {
+function showResults(resultEntries = null) {
   let sum = 0;
   const valueItems = [];
 
-  entities.forEach(({ body, mesh, faceNormals, sides }, i) => {
-    const rotation = body.rotation();
-    const topFaceIdx = detectTopFaceIndex(faceNormals, rotation);
-    const value = topFaceIdx + 1;
+  const entries = resultEntries ?? inspectDiceLandings();
+
+  entries.forEach(({ entity, value, topFaceIdx }, i) => {
+    const { mesh } = entity;
     sum += value;
 
     const mats = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
@@ -407,7 +445,77 @@ function showResults() {
   showCanvasResultPopup(sum, valueItems);
 }
 
+function getSurfaceLandingHeight(entity) {
+  return Math.max(SURFACE_LAND_HEIGHT_MIN, entity.physRadius * SURFACE_LAND_HEIGHT_FACTOR);
+}
+
+function inspectDiceLandings() {
+  return entities.map((entity) => {
+    const rotation = entity.body.rotation();
+    const topFace = detectTopFace(entity.faceNormals, rotation);
+    const value = topFace.index + 1;
+    const translation = entity.body.translation();
+    const onSurface = translation.y <= getSurfaceLandingHeight(entity);
+    const faceLanded = topFace.alignment >= FACE_LAND_ALIGNMENT_MIN;
+
+    return {
+      entity,
+      topFaceIdx: topFace.index,
+      value,
+      onSurface,
+      faceLanded,
+      valid: onSurface && faceLanded,
+    };
+  });
+}
+
+function relaunchInvalidDice(invalidEntries) {
+  relandAttempts += 1;
+  triggerRelandFlash();
+  const upwardImpulse = RELAND_UPWARD_IMPULSE_BASE + ((relandAttempts - 1) * RELAND_UPWARD_IMPULSE_STEP);
+
+  invalidEntries.forEach(({ entity }) => {
+    const { body, physRadius } = entity;
+    const t = body.translation();
+    const lift = Math.max(RELAND_VERTICAL_LIFT, physRadius * 0.45);
+    const heading = Math.random() * Math.PI * 2;
+    const tiltDeg = RELAND_TILT_MIN_DEG + (Math.random() * (RELAND_TILT_MAX_DEG - RELAND_TILT_MIN_DEG));
+    const tiltRad = (tiltDeg * Math.PI) / 180;
+    const lateralFromTilt = upwardImpulse * Math.tan(tiltRad);
+    const lateralImpulse = Math.max(RELAND_LATERAL_IMPULSE, lateralFromTilt);
+
+    body.setTranslation({ x: t.x, y: t.y + lift, z: t.z }, true);
+    body.setLinvel({ x: 0, y: 0, z: 0 }, true);
+    body.setAngvel({ x: 0, y: 0, z: 0 }, true);
+    if (typeof body.wakeUp === 'function') {
+      body.wakeUp();
+    }
+
+    body.applyImpulse({
+      x: Math.cos(heading) * lateralImpulse,
+      y: upwardImpulse,
+      z: Math.sin(heading) * lateralImpulse,
+    }, true);
+    body.applyTorqueImpulse({
+      x: (Math.random() - 0.5) * RELAND_TORQUE_IMPULSE,
+      y: (Math.random() - 0.5) * RELAND_TORQUE_IMPULSE,
+      z: (Math.random() - 0.5) * RELAND_TORQUE_IMPULSE,
+    }, true);
+  });
+
+  stepCount = 0;
+  stableFrames = 0;
+  simActive = true;
+  setRollButtonState(true, 'Rolling…');
+}
+
 function clearDiceFromCanvas() {
+  if (relandFlashTimer) {
+    clearTimeout(relandFlashTimer);
+    relandFlashTimer = null;
+  }
+  relandFlashPopup.classList.remove('show');
+
   entities.forEach((e) => {
     scene.remove(e.mesh);
     disposeDieMesh(e.mesh);
@@ -424,6 +532,7 @@ function clearDiceFromCanvas() {
   simActive = false;
   stepCount = 0;
   stableFrames = 0;
+  relandAttempts = 0;
   setRollButtonState(false, 'Roll');
 }
 
@@ -441,6 +550,7 @@ function startRoll() {
   world      = buildPhysicsWorld(trayHalfSize);
   stepCount  = 0;
   stableFrames = 0;
+  relandAttempts = 0;
   simActive  = true;
   setRollButtonState(true, 'Rolling…');
 
@@ -448,7 +558,7 @@ function startRoll() {
     const dieObj = createDie(sides, i, dieColors[i]);
     const body   = spawnDie(world, dieObj, i, selectedDice.length);
     scene.add(dieObj.mesh);
-    entities.push({ body, mesh: dieObj.mesh, faceNormals: dieObj.faceNormals, sides });
+    entities.push({ body, mesh: dieObj.mesh, faceNormals: dieObj.faceNormals, sides, physRadius: dieObj.physRadius });
   });
 }
 
@@ -505,8 +615,15 @@ function animate() {
     stableFrames = canEvaluateStable && nearFloor && nearlyStopped ? stableFrames + 1 : 0;
 
     if ((allSleeping && nearFloor) || stableFrames >= MIN_STABLE_FRAMES || stepCount >= MAX_STEPS) {
-      simActive = false;
-      showResults();
+      const landingEntries = inspectDiceLandings();
+      const invalidEntries = landingEntries.filter((entry) => !entry.valid);
+
+      if (invalidEntries.length > 0 && relandAttempts < MAX_RELAND_ATTEMPTS) {
+        relaunchInvalidDice(invalidEntries);
+      } else {
+        simActive = false;
+        showResults(landingEntries);
+      }
     }
   }
 

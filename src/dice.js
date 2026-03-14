@@ -191,7 +191,7 @@ function getOrCreateDieGeometryData(sides) {
 
   const physHullPositions = new Float32Array(baseGeo.attributes.position.array);
 
-  const geometry = baseGeo.toNonIndexed();
+  const geometry = baseGeo.index ? baseGeo.toNonIndexed() : baseGeo.clone();
   baseGeo.dispose();
 
   if (geometry.groups.length === 0) {
@@ -283,7 +283,7 @@ export function detectValue(faceNormals, rapierRot) {
   return detectTopFaceIndex(faceNormals, rapierRot) + 1;
 }
 
-export function detectTopFaceIndex(faceNormals, rapierRot) {
+export function detectTopFace(faceNormals, rapierRot) {
   TEMP_ROTATION_QUAT.set(rapierRot.x, rapierRot.y, rapierRot.z, rapierRot.w);
 
   let bestDot = -Infinity;
@@ -299,5 +299,9 @@ export function detectTopFaceIndex(faceNormals, rapierRot) {
     }
   }
 
-  return bestIdx;
+  return { index: bestIdx, alignment: bestDot };
+}
+
+export function detectTopFaceIndex(faceNormals, rapierRot) {
+  return detectTopFace(faceNormals, rapierRot).index;
 }
