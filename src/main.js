@@ -40,7 +40,6 @@ canvasContainer.append(panelToggleBtn, fullscreenBtn, canvasResultPopup);
 canvasContainer.append(relandFlashPopup, totalFlashPopup);
 
 const COLOR_PALETTE = [
-  '#233C4B',
   '#FF7D2D',
   '#FAC846',
   '#A0C382',
