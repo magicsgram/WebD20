@@ -40,12 +40,11 @@ canvasContainer.append(panelToggleBtn, fullscreenBtn, canvasResultPopup);
 canvasContainer.append(relandFlashPopup, totalFlashPopup);
 
 const COLOR_PALETTE = [
-  '#833E8D',
-  '#E25800',
-  '#F0B285',
-  '#D2E177',
-  '#FB83AD',
-  '#F08592',
+  '#233C4B',
+  '#FF7D2D',
+  '#FAC846',
+  '#A0C382',
+  '#5F9B8C',
 ];
 
 // const COLOR_PALETTE = [
@@ -67,7 +66,7 @@ const RUNTIME_CONFIG = {
   trayScale: {
     minDice: 1,
     maxDice: 24,
-    minScale: 0.7,
+    minScale: 0.8,
     maxScale: 1.5,
     baseHalfSize: 6.5,
   },
@@ -116,15 +115,19 @@ const RUNTIME_CONFIG = {
       wallSegments: 64,
     },
     launch: {
-      dropHeightBaseMin: 4.0,
-      dropHeightBaseMax: 6.0,
-      dropHeightRandomMin: 0.1,
-      dropHeightRandomMax: 0.1,
+      dropHeightBaseMin: 2.0,
+      dropHeightBaseMax: 4.0,
+      dropHeightRandomMin: 0.5,
+      dropHeightRandomMax: 0.5,
       dropHeightStep: 0.18,
       boundaryInset: 1.35,
       impulseOffset: 0.5,
       torqueStrength: 8,
       centerImpulseStrength: 4,
+      upwardImpulseBase: 6,
+      upwardImpulseJitter: 0.35,
+      upwardVelocityBase: 5.0,
+      upwardVelocityJitter: 0.5,
     },
   },
 };
@@ -510,23 +513,20 @@ function getLaunchDropHeight(diceCount) {
   };
 }
 
-function getRandomDropPoint(trayHalfSize, inset) {
+function getEvenlySpacedDropPoints(count, trayHalfSize, inset) {
   const boundaryRadius = Math.max(0.75, trayHalfSize - inset);
-  const angle = Math.random() * Math.PI * 2;
-  // Spawn near the outer boundary ring (80–100% of the safe radius)
-  const radius = boundaryRadius * (0.80 + Math.random() * 0.20);
-
-  return {
-    x: Math.cos(angle) * radius,
-    z: Math.sin(angle) * radius,
-  };
+  const baseAngle = Math.random() * Math.PI * 2;
+  const step = (Math.PI * 2) / Math.max(1, count);
+  return Array.from({ length: count }, (_, i) => {
+    const angle = baseAngle + i * step;
+    // Per-die radius jitter keeps placement feeling random
+    const radius = boundaryRadius * (0.80 + Math.random() * 0.20);
+    return { x: Math.cos(angle) * radius, z: Math.sin(angle) * radius };
+  });
 }
 
-function spawnDie(physWorld, dieObj, index, trayHalfSize, diceCount) {
-  const { x, z } = getRandomDropPoint(
-    trayHalfSize,
-    PHYS.launch.boundaryInset + (dieObj.physRadius * 0.9)
-  );
+function spawnDie(physWorld, dieObj, index, trayHalfSize, diceCount, dropPoint) {
+  const { x, z } = dropPoint;
   const { base, random } = getLaunchDropHeight(diceCount);
   const y = base + (Math.random() * random) + (index * PHYS.launch.dropHeightStep);
 
@@ -568,12 +568,23 @@ function spawnDie(physWorld, dieObj, index, trayHalfSize, diceCount) {
   const launchTorqueStrength = PHYS.launch.torqueStrength;
   body.applyTorqueImpulse(getRandomTorqueImpulse(launchTorqueStrength, launchImpulseOffset), true);
 
-  // Launch towards center — impulse magnitude scales with spawn distance
+  // Velocity kick is mass-independent, so upward launch is always visible.
+  const upwardVelocity = Math.max(
+    0,
+    PHYS.launch.upwardVelocityBase + (((Math.random() * 2) - 1) * PHYS.launch.upwardVelocityJitter)
+  );
+  body.setLinvel({ x: 0, y: upwardVelocity, z: 0 }, true);
+
+  // Launch towards center with a configurable upward kick.
   const dist = Math.hypot(x, z);
-  if (dist > 1e-4) {
-    const cs = PHYS.launch.centerImpulseStrength;
-    body.applyImpulse({ x: (-x / dist) * cs * dist, y: 0, z: (-z / dist) * cs * dist }, true);
-  }
+  const cs = PHYS.launch.centerImpulseStrength;
+  const upwardImpulse = Math.max(
+    0,
+    PHYS.launch.upwardImpulseBase + (((Math.random() * 2) - 1) * PHYS.launch.upwardImpulseJitter)
+  );
+  const impulseX = dist > 1e-4 ? (-x / dist) * cs * dist : 0;
+  const impulseZ = dist > 1e-4 ? (-z / dist) * cs * dist : 0;
+  body.applyImpulse({ x: impulseX, y: upwardImpulse, z: impulseZ }, true);
 
   return body;
 }
@@ -709,11 +720,19 @@ function startRoll() {
   simActive  = true;
   setRollButtonState(true, 'Rolling…');
 
-  selectedDice.forEach((sides, i) => {
-    const dieObj = createDie(sides, i, dieColors[i]);
-    const body   = spawnDie(world, dieObj, i, trayHalfSize, selectedDice.length);
+  const dieObjects = selectedDice.map((sides, i) => createDie(sides, i, dieColors[i]));
+  const maxPhysRadius = dieObjects.reduce((max, d) => Math.max(max, d.physRadius), 0);
+
+  const dropPoints = getEvenlySpacedDropPoints(
+    selectedDice.length,
+    trayHalfSize,
+    PHYS.launch.boundaryInset + (maxPhysRadius * 0.9)
+  );
+
+  dieObjects.forEach((dieObj, i) => {
+    const body = spawnDie(world, dieObj, i, trayHalfSize, selectedDice.length, dropPoints[i]);
     scene.add(dieObj.mesh);
-    entities.push({ body, mesh: dieObj.mesh, faceNormals: dieObj.faceNormals, sides, physRadius: dieObj.physRadius });
+    entities.push({ body, mesh: dieObj.mesh, faceNormals: dieObj.faceNormals, sides: dieObj.sides, physRadius: dieObj.physRadius });
   });
 }
 

@@ -40,7 +40,7 @@ const D20_UV_CENTER = {
 const D20_TEXT_UV = { x: 0.5, y: 0.41 };
 
 const TOON_GRADIENT = (() => {
-  const data = new Uint8Array([24, 92, 168, 255]);
+  const data = new Uint8Array([48, 128, 204, 255]);
   const tex = new THREE.DataTexture(data, 4, 1, THREE.RedFormat);
   tex.needsUpdate = true;
   tex.minFilter = THREE.NearestFilter;
@@ -224,7 +224,7 @@ export function createDie(sides, colorIndex, colorHexOverride) {
       color: 0xffffff,
       gradientMap: TOON_GRADIENT,
       emissive: new THREE.Color(hexColor),
-      emissiveIntensity: 0.04,
+      emissiveIntensity: 0.08,
     })
   );
 

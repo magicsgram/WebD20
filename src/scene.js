@@ -139,9 +139,9 @@ export function initScene(container) {
   updateWallMeshes();
 
   // ── Lights ────────────────────────────────────────────────────────────────────
-  scene.add(new THREE.AmbientLight(0xffffff, 0.68));
+  scene.add(new THREE.AmbientLight(0xffffff, 1.0));
 
-  const key = new THREE.DirectionalLight(0xffffff, 0.35);
+  const key = new THREE.DirectionalLight(0xffffff, 1.0);
   key.position.set(5, 11, 6);
   key.castShadow = true;
   key.shadow.mapSize.set(1024, 1024);
@@ -155,7 +155,7 @@ export function initScene(container) {
   key.shadow.camera.bottom = -12;
   scene.add(key);
 
-  const fill = new THREE.DirectionalLight(0x88aaff, 0.04);
+  const fill = new THREE.DirectionalLight(0x88aaff, 0.05);
   fill.position.set(-5, 8, -4);
   scene.add(fill);
 
