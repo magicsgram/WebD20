@@ -27,8 +27,8 @@ export const RUNTIME_CONFIG = {
     angularStopSpeed: 0.18,
     verticalStopSpeed: 0.07,
     settleHeight: 1.25,
-    faceLandAlignmentMin: 0.90,
-    surfaceLandHeightFactor: 1.14,
+    faceLandAlignmentMin: 0.85,
+    surfaceLandHeightFactor: 1.3,
     surfaceLandHeightMin: 0.78,
   },
   reland: {

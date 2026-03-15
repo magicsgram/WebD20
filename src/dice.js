@@ -12,7 +12,7 @@ const FACE_COUNT    = { 4: 4, 6: 6, 8: 8, 12: 12, 20: 20 };
 // How many triangles make up ONE polygon face
 const TRIS_PER_FACE = { 4: 1, 6: 2, 8: 1, 12: 3, 20: 1 };
 // Visual / physics scale
-const SCALE         = { 4: 0.72, 6: 0.68, 8: 0.89, 12: 0.70, 20: 0.85 };
+const SCALE         = { 4: 0.72, 6: 0.68, 8: 0.89, 12: 0.70, 20: 0.765 };
 
 function makeVibrantShades(hex) {
   const base = new THREE.Color(hex);
