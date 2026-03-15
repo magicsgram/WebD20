@@ -212,7 +212,11 @@ function isCanvasFullscreen() {
 function setPanelHidden(hidden) {
   document.body.classList.toggle('panel-hidden', hidden);
   panelToggleBtn.setAttribute('aria-expanded', String(!hidden));
+  panelToggleBtn.textContent = hidden ? '☰' : '☰ Close';
+  panelToggleBtn.setAttribute('aria-label', hidden ? 'Open settings panel' : 'Close settings panel');
 }
+
+setPanelHidden(document.body.classList.contains('panel-hidden'));
 
 function setRollButtonState(disabled, text) {
   rollInputLocked = disabled;
