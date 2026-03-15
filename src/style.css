@@ -251,13 +251,14 @@ select:focus {
 
 .count-row {
   display: grid;
-  grid-template-columns: minmax(58px, 78px) repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 0.45rem;
   align-items: center;
   margin-bottom: 0.8rem;
 }
 
 .count-row select {
+  grid-column: 1 / -1;
   margin-bottom: 0;
 }
 
@@ -266,8 +267,8 @@ select:focus {
   background: #0a160c;
   color: #d1fae5;
   border-radius: 7px;
-  padding: 0.45rem 0.5rem;
-  font-size: 0.82rem;
+  padding: 0.42rem 0.38rem;
+  font-size: 0.76rem;
   font-weight: 600;
   white-space: nowrap;
   cursor: pointer;
@@ -275,8 +276,8 @@ select:focus {
 }
 
 #set-all-d12 {
-  font-size: 0.76rem;
-  padding: 0.42rem 0.38rem;
+  font-size: 0.74rem;
+  padding: 0.40rem 0.34rem;
 }
 
 .quick-btn:hover {

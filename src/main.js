@@ -7,6 +7,7 @@ import './style.css';
 const diceCountSelect = document.querySelector('#dice-count');
 const diceConfigs     = document.querySelector('#dice-configs');
 const setAllD6Btn     = document.querySelector('#set-all-d6');
+const setAllD8Btn     = document.querySelector('#set-all-d8');
 const setAllD12Btn    = document.querySelector('#set-all-d12');
 const setAllD20Btn    = document.querySelector('#set-all-d20');
 const canvasContainer = document.querySelector('#canvas-container');
@@ -86,11 +87,11 @@ const RUNTIME_CONFIG = {
       linearDamping: 0.0,
       angularDamping: 0.0,
       friction: 0.005,
-      restitution: 0.5,
+      restitution: 0.45,
       density: 2.1,
     },
     world: {
-      gravityY: -11.0,
+      gravityY: -15.0,
       wallThickness: 0.5,
       wallHalfHeight: 300,
       wallRestitution: 0.7,
@@ -345,7 +346,7 @@ function renderDiceSelectors() {
     select.dataset.dieType = 'true';
     select.className = 'die-type-select';
 
-    [6, 12, 20].forEach(faces => {
+    [6, 8, 12, 20].forEach(faces => {
       const o = document.createElement('option');
       o.value = String(faces); o.textContent = `D${faces}`;
       if (faces === 6) o.selected = true;
@@ -382,6 +383,10 @@ function setAllDiceTypes(value) {
 
 setAllD6Btn.addEventListener('click', () => {
   setAllDiceTypes(6);
+  clearDiceFromCanvas();
+});
+setAllD8Btn.addEventListener('click', () => {
+  setAllDiceTypes(8);
   clearDiceFromCanvas();
 });
 setAllD12Btn.addEventListener('click', () => {

@@ -12,7 +12,7 @@ const FACE_COUNT    = { 4: 4, 6: 6, 8: 8, 12: 12, 20: 20 };
 // How many triangles make up ONE polygon face
 const TRIS_PER_FACE = { 4: 1, 6: 2, 8: 1, 12: 3, 20: 1 };
 // Visual / physics scale
-const SCALE         = { 4: 0.72, 6: 0.68, 8: 0.74, 12: 0.70, 20: 0.85 };
+const SCALE         = { 4: 0.72, 6: 0.68, 8: 0.99, 12: 0.70, 20: 0.85 };
 
 function makeVibrantShades(hex) {
   const base = new THREE.Color(hex);
@@ -38,6 +38,14 @@ const D20_UV_CENTER = {
   y: (D20_UV_TOP.y + D20_UV_LEFT.y + D20_UV_RIGHT.y) / 3,
 };
 const D20_TEXT_UV = { x: 0.5, y: 0.41 };
+const D8_UV_TOP = { x: 0.5, y: 0.94 };
+const D8_UV_LEFT = { x: 0.15, y: 0.26 };
+const D8_UV_RIGHT = { x: 0.85, y: 0.26 };
+const D8_UV_CENTER = {
+  x: (D8_UV_TOP.x + D8_UV_LEFT.x + D8_UV_RIGHT.x) / 3,
+  y: (D8_UV_TOP.y + D8_UV_LEFT.y + D8_UV_RIGHT.y) / 3,
+};
+const D8_TEXT_UV = { x: D8_UV_CENTER.x, y: D8_UV_CENTER.y };
 
 const TOON_GRADIENT = (() => {
   const data = new Uint8Array([48, 128, 204, 255]);
@@ -150,20 +158,31 @@ function makeNumberTexture(number, bgHex, sides) {
   // Number
   const fontSize = sides === 20
     ? (number >= 10 ? 46 : 56)
-    : (number >= 10 ? 90 : 140);
+    : (sides === 8
+      ? (number >= 10 ? 66 : 86)
+      : (sides === 12
+        ? (number >= 10 ? 118 : 161)
+        : (sides === 6
+          ? (number >= 10 ? 104 : 161)
+          : (number >= 10 ? 90 : 140))));
   ctx.font = `bold ${fontSize}px Arial, sans-serif`;
   ctx.textAlign = 'left';
   ctx.textBaseline = 'alphabetic';
-  const textX = sides === 20 ? S * D20_TEXT_UV.x : S / 2;
-  const textY = sides === 20 ? S * D20_TEXT_UV.y : S / 2;
+  const textX = sides === 20
+    ? S * D20_TEXT_UV.x
+    : (sides === 8 ? S * D8_TEXT_UV.x : S / 2);
+  const textY = sides === 20
+    ? S * D20_TEXT_UV.y
+    : (sides === 8 ? S * D8_TEXT_UV.y : S / 2);
   ctx.fillStyle = '#0a0a0a';
   const text = String(number);
   const glyph = drawCenteredNumber(ctx, text, textX, textY);
 
   if (sides >= 9 && (number === 6 || number === 9)) {
-    const dotRadius = sides === 20 ? 6 : 10;
-    const dotPadX = sides === 20 ? 4 : 5;
-    const dotPadY = sides === 20 ? 4 : 5;
+    const baseDotRadius = sides === 20 ? 6 : 10;
+    const dotRadius = baseDotRadius * 0.9;
+    const dotPadX = sides === 20 ? 1 : 2;
+    const dotPadY = sides === 20 ? 1 : 2;
     const rightEdge = glyph.drawX + glyph.right;
     const bottomEdge = glyph.drawY + glyph.descent;
     const dotX = Math.min(S - dotRadius - 6, rightEdge + dotPadX);
@@ -201,15 +220,15 @@ function addFaceGroups(geometry, numFaces, trisPerFace) {
   }
 }
 
-function applyTriFaceUVs(geometry, numFaces, trisPerFace) {
+function applyTriFaceUVs(geometry, numFaces, trisPerFace, uvTop, uvLeft, uvRight) {
   if (trisPerFace !== 1 || !geometry.attributes.uv) return;
 
   const uv = geometry.attributes.uv;
   for (let f = 0; f < numFaces; f++) {
     const base = f * 3;
-    uv.setXY(base, D20_UV_TOP.x, D20_UV_TOP.y);
-    uv.setXY(base + 1, D20_UV_LEFT.x, D20_UV_LEFT.y);
-    uv.setXY(base + 2, D20_UV_RIGHT.x, D20_UV_RIGHT.y);
+    uv.setXY(base, uvTop.x, uvTop.y);
+    uv.setXY(base + 1, uvLeft.x, uvLeft.y);
+    uv.setXY(base + 2, uvRight.x, uvRight.y);
   }
   uv.needsUpdate = true;
 }
@@ -327,8 +346,12 @@ function getOrCreateDieGeometryData(sides) {
     applyPlanarFaceUVs(geometry, numFaces, trisPerFace);
   }
 
+  if (sides === 8) {
+    applyTriFaceUVs(geometry, numFaces, trisPerFace, D8_UV_TOP, D8_UV_LEFT, D8_UV_RIGHT);
+  }
+
   if (sides === 20) {
-    applyTriFaceUVs(geometry, numFaces, trisPerFace);
+    applyTriFaceUVs(geometry, numFaces, trisPerFace, D20_UV_TOP, D20_UV_LEFT, D20_UV_RIGHT);
   }
 
   geometry.computeVertexNormals();
