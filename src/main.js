@@ -74,12 +74,26 @@ const RUNTIME_CONFIG = {
   },
   reland: {
     maxAttempts: 8,
-    verticalLift: 1.0,
-    upwardImpulseBase: 40.0,
-    lateralImpulse: 3.5,
-    torqueImpulse: 4.8,
-    tiltMinDeg: 15,
-    tiltMaxDeg: 30,
+    badLanding: {
+      verticalLift: 0.0,
+      upwardImpulseBase: 28.0,
+      upwardImpulseJitterScale: 0,
+      lateralImpulse: 0,
+      torqueImpulse: 14.0,
+      torqueImpulseJitterScale: 0,
+      tiltMinDeg: 10,
+      tiltMaxDeg: 22,
+    },
+    userReroll: {
+      verticalLift: 0.0,
+      upwardImpulseBase: 40.0,
+      upwardImpulseJitterScale: 0.25,
+      lateralImpulse: 20,
+      torqueImpulse: 20.8,
+      torqueImpulseJitterScale: 0.25,
+      tiltMinDeg: 15,
+      tiltMaxDeg: 30,
+    },
   },
   physics: {
     dt: 1 / 60,
@@ -121,6 +135,8 @@ const TRAY_SCALE = RUNTIME_CONFIG.trayScale;
 const FLASH = RUNTIME_CONFIG.flash;
 const SIM = RUNTIME_CONFIG.simulation;
 const RELAND = RUNTIME_CONFIG.reland;
+const BAD_LANDING_RELAND = RELAND.badLanding;
+const USER_REROLL = RELAND.userReroll;
 const PHYS = RUNTIME_CONFIG.physics;
 const SIM_LINEAR_STOP_SPEED_SQ = SIM.linearStopSpeed * SIM.linearStopSpeed;
 const SIM_ANGULAR_STOP_SPEED_SQ = SIM.angularStopSpeed * SIM.angularStopSpeed;
@@ -228,7 +244,7 @@ function canTriggerRoll() {
 
 function tryStartRoll({ forceRestart = false } = {}) {
   if (forceRestart && simActive) {
-    startRoll();
+    relaunchRollingDice();
     return true;
   }
 
@@ -633,22 +649,35 @@ function inspectDiceLandings() {
   });
 }
 
-function relaunchInvalidDice(invalidEntries) {
-  relandAttempts += 1;
-  triggerRelandFlash();
-  const upwardImpulse = RELAND.upwardImpulseBase;
-
-  const relandTargets = invalidEntries.map((entry) => entry.entity);
-
-  relandTargets.forEach((entity) => {
-    const { body, physRadius } = entity;
+function relaunchDiceEntities(relaunchTargets, relaunchConfig, {
+  resetHighlights = false,
+  applyVerticalLift = true,
+  applyUpwardImpulse = true,
+  shouldApplyUpwardImpulse = null,
+} = {}) {
+  relaunchTargets.forEach((entity) => {
+    const { body, mesh, physRadius, baseEmissiveHex } = entity;
     const t = body.translation();
-    const lift = Math.max(RELAND.verticalLift, physRadius * 0.45);
+    const lift = applyVerticalLift ? Math.max(relaunchConfig.verticalLift, physRadius * 0.45) : 0;
     const heading = Math.random() * Math.PI * 2;
-    const tiltDeg = RELAND.tiltMinDeg + (Math.random() * (RELAND.tiltMaxDeg - RELAND.tiltMinDeg));
+    const tiltDeg = relaunchConfig.tiltMinDeg + (Math.random() * (relaunchConfig.tiltMaxDeg - relaunchConfig.tiltMinDeg));
     const tiltRad = (tiltDeg * Math.PI) / 180;
+    const upwardImpulse = relaunchConfig.upwardImpulseBase * (
+      1 + ((((Math.random() * 2) - 1) * (relaunchConfig.upwardImpulseJitterScale ?? 0)))
+    );
+    const allowUpwardImpulse = applyUpwardImpulse
+      && (typeof shouldApplyUpwardImpulse === 'function' ? shouldApplyUpwardImpulse(entity, t) : true);
     const lateralFromTilt = upwardImpulse * Math.tan(tiltRad);
-    const lateralImpulse = Math.max(RELAND.lateralImpulse, lateralFromTilt);
+    const lateralImpulse = Math.max(relaunchConfig.lateralImpulse, lateralFromTilt);
+    const torqueImpulseJitter = relaunchConfig.torqueImpulse * (relaunchConfig.torqueImpulseJitterScale ?? 0);
+
+    if (resetHighlights) {
+      const mats = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+      mats.forEach((mat) => {
+        mat.emissive.setHex(baseEmissiveHex);
+        mat.emissiveIntensity = 0.08;
+      });
+    }
 
     body.setTranslation({ x: t.x, y: t.y + lift, z: t.z }, true);
     body.setLinvel({ x: 0, y: 0, z: 0 }, true);
@@ -659,16 +688,63 @@ function relaunchInvalidDice(invalidEntries) {
 
     body.applyImpulse({
       x: Math.cos(heading) * lateralImpulse,
-      y: upwardImpulse,
+      y: allowUpwardImpulse ? upwardImpulse : 0,
       z: Math.sin(heading) * lateralImpulse,
     }, true);
-    body.setAngvel(getRandomAngularVelocity(RELAND.torqueImpulse), true);
+    body.setAngvel(getRandomAngularVelocity(relaunchConfig.torqueImpulse, torqueImpulseJitter), true);
   });
+}
+
+function relaunchInvalidDice(invalidEntries) {
+  relandAttempts += 1;
+  triggerRelandFlash();
+
+  const relandTargets = invalidEntries.map((entry) => entry.entity);
+  relaunchDiceEntities(relandTargets, BAD_LANDING_RELAND);
 
   stepCount = 0;
   stableFrames = 0;
   simActive = true;
   setRollButtonState(true, 'Rolling…');
+}
+
+function relaunchStabilizedDice({ showFlash = false } = {}) {
+  if (!world || entities.length === 0) return false;
+
+  if (showFlash) {
+    triggerRelandFlash();
+  }
+  hideCanvasResultPopup();
+
+  relaunchDiceEntities(entities, USER_REROLL, { resetHighlights: true });
+
+  stepCount = 0;
+  stableFrames = 0;
+  relandAttempts = 0;
+  simActive = true;
+  setRollButtonState(true, 'Rolling…');
+  return true;
+}
+
+function relaunchRollingDice() {
+  if (!world || entities.length === 0 || !simActive) return false;
+
+  hideCanvasResultPopup();
+  relaunchDiceEntities(entities, USER_REROLL, {
+    applyVerticalLift: false,
+    applyUpwardImpulse: true,
+    shouldApplyUpwardImpulse: (entity, translation) => translation.y <= (entity.physRadius * 2),
+  });
+
+  stepCount = 0;
+  stableFrames = 0;
+  relandAttempts = 0;
+  setRollButtonState(true, 'Rolling…');
+  return true;
+}
+
+function hasStabilizedDiceOnScreen() {
+  return entities.length > 0 && !simActive && canvasResultPopup.classList.contains('show');
 }
 
 function clearDiceFromCanvas() {
@@ -700,6 +776,10 @@ function clearDiceFromCanvas() {
 
 // ── Roll handler ─────────────────────────────────────────────────────────────
 function startRoll() {
+  if (hasStabilizedDiceOnScreen() && relaunchStabilizedDice({ showFlash: false })) {
+    return;
+  }
+
   clearDiceFromCanvas();
 
   const selectedDice = Array.from(
@@ -728,7 +808,15 @@ function startRoll() {
   dieObjects.forEach((dieObj, i) => {
     const body = spawnDie(world, dieObj, i, trayHalfSize, selectedDice.length, dropPoints[i]);
     scene.add(dieObj.mesh);
-    entities.push({ body, mesh: dieObj.mesh, faceNormals: dieObj.faceNormals, sides: dieObj.sides, physRadius: dieObj.physRadius });
+    const baseEmissiveHex = dieObj.mesh.material[0]?.emissive?.getHex?.() ?? 0x000000;
+    entities.push({
+      body,
+      mesh: dieObj.mesh,
+      faceNormals: dieObj.faceNormals,
+      sides: dieObj.sides,
+      physRadius: dieObj.physRadius,
+      baseEmissiveHex,
+    });
   });
 }
 
@@ -742,7 +830,7 @@ window.addEventListener('keydown', (event) => {
   if (inFormControl) return;
 
   event.preventDefault();
-  startRoll();
+  tryStartRoll({ forceRestart: true });
 });
 
 // ── Render / animation loop ───────────────────────────────────────────────────
