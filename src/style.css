@@ -311,33 +311,73 @@ select:focus {
   padding: 0.22rem 0.32rem;
 }
 
-.die-config .die-color-select {
-  margin-bottom: 0;
-}
-
-.die-config .die-color-input {
+.die-config .die-color-trigger {
   width: 100%;
   margin-bottom: 0;
-  min-height: 1.85rem;
+  min-height: 1.6rem;
+  border-radius: 7px;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  cursor: pointer;
   padding: 0;
+}
+
+.color-picker-dialog {
+  border: none;
+  border-radius: 12px;
+  padding: 0;
+  max-width: min(92vw, 320px);
+  background: #0d1911;
+  color: #e2e8f0;
+}
+
+.color-picker-dialog::backdrop {
+  background: rgba(0, 0, 0, 0.5);
+}
+
+.color-picker-shell {
+  padding: 0.8rem;
+}
+
+.color-picker-title {
+  font-size: 0.82rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  margin-bottom: 0.6rem;
+  text-transform: uppercase;
+}
+
+.color-picker-palette {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.35rem;
+}
+
+.color-picker-swatch {
+  width: 100%;
+  min-height: 2rem;
+  border-radius: 7px;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  cursor: pointer;
+  padding: 0;
+  appearance: none;
+}
+
+.color-picker-swatch.is-active {
+  outline: 2px solid #f8fafc;
+  outline-offset: 1px;
+}
+
+.color-picker-close {
+  width: 100%;
+  margin-top: 0.65rem;
   border-radius: 7px;
   border: 1px solid #2d4a32;
   background: #0a160c;
+  color: #d1fae5;
+  padding: 0.4rem 0.55rem;
+  font-size: 0.8rem;
+  font-weight: 600;
   cursor: pointer;
-}
-
-.die-config .die-color-input::-webkit-color-swatch-wrapper {
-  padding: 0;
-}
-
-.die-config .die-color-input::-webkit-color-swatch {
-  border: 0;
-  border-radius: 6px;
-}
-
-.die-config .die-color-input::-moz-color-swatch {
-  border: 0;
-  border-radius: 6px;
 }
 
 /* ── Results ─────────────────────────────────────────────────────────────── */
@@ -379,7 +419,15 @@ select:focus {
     -webkit-overflow-scrolling: touch;
   }
 
-  .die-config .die-color-input {
-    min-height: 2rem;
+  .die-config .die-color-trigger {
+    min-height: 1.75rem;
+  }
+
+  .color-picker-palette {
+    gap: 0.32rem;
+  }
+
+  .color-picker-swatch {
+    min-height: 2.15rem;
   }
 }

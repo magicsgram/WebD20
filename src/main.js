@@ -40,19 +40,28 @@ canvasContainer.append(panelToggleBtn, fullscreenBtn, canvasResultPopup);
 canvasContainer.append(relandFlashPopup, totalFlashPopup);
 
 const COLOR_PALETTE = [
-  '#a6cee3',
-  '#1f78b4',
-  '#b2df8a',
-  '#33a02c',
-  '#fb9a99',
-  '#e31a1c',
-  '#fdbf6f',
-  '#ff7f00',
-  '#cab2d6',
-  '#6a3d9a',
-  '#ffff99',
-  '#b15928',
+  '#833E8D',
+  '#E25800',
+  '#F0B285',
+  '#D2E177',
+  '#FB83AD',
+  '#F08592',
 ];
+
+// const COLOR_PALETTE = [
+//   '#a6cee3',
+//   '#1f78b4',
+//   '#b2df8a',
+//   '#33a02c',
+//   '#fb9a99',
+//   '#e31a1c',
+//   '#fdbf6f',
+//   '#ff7f00',
+//   '#cab2d6',
+//   '#6a3d9a',
+//   '#ffff99',
+//   '#b15928',
+// ];
 
 const RUNTIME_CONFIG = {
   trayScale: {
@@ -132,7 +141,80 @@ let dieColors = [];
 let popupTimer = null;
 let rollInputLocked = false;
 let relandFlashTimer = null;
-const useMobileColorInput = window.matchMedia('(pointer: coarse)').matches;
+let activeColorPicker = null;
+
+const colorPickerDialog = document.createElement('dialog');
+colorPickerDialog.className = 'color-picker-dialog';
+colorPickerDialog.innerHTML = `
+  <div class="color-picker-shell">
+    <div class="color-picker-title">Choose Color</div>
+    <div class="color-picker-palette" role="radiogroup" aria-label="Color palette"></div>
+    <button type="button" class="color-picker-close">Close</button>
+  </div>
+`;
+document.body.appendChild(colorPickerDialog);
+
+const colorPickerPalette = colorPickerDialog.querySelector('.color-picker-palette');
+const colorPickerCloseBtn = colorPickerDialog.querySelector('.color-picker-close');
+
+function updateColorTriggerButton(button, hex) {
+  button.style.backgroundColor = hex;
+}
+
+function setPickerActiveSwatch(hex) {
+  colorPickerPalette.querySelectorAll('button[data-color]').forEach((swatch) => {
+    const isActive = swatch.dataset.color === hex;
+    swatch.classList.toggle('is-active', isActive);
+    swatch.setAttribute('aria-checked', isActive ? 'true' : 'false');
+  });
+}
+
+function closeColorPicker() {
+  if (colorPickerDialog.open) {
+    colorPickerDialog.close();
+  }
+  activeColorPicker = null;
+}
+
+function openColorPickerFor(index, triggerButton) {
+  activeColorPicker = { index, triggerButton };
+  setPickerActiveSwatch(dieColors[index]);
+  if (!colorPickerDialog.open) {
+    colorPickerDialog.showModal();
+  }
+}
+
+COLOR_PALETTE.forEach((hex) => {
+  const swatch = document.createElement('button');
+  swatch.type = 'button';
+  swatch.className = 'color-picker-swatch';
+  swatch.dataset.color = hex;
+  swatch.style.backgroundColor = hex;
+  swatch.setAttribute('role', 'radio');
+  swatch.setAttribute('aria-label', `Choose ${hex.toUpperCase()}`);
+  swatch.setAttribute('aria-checked', 'false');
+
+  swatch.addEventListener('click', () => {
+    if (!activeColorPicker) return;
+    const { index, triggerButton } = activeColorPicker;
+    if (dieColors[index] !== hex) {
+      dieColors[index] = hex;
+      updateColorTriggerButton(triggerButton, hex);
+      clearDiceFromCanvas();
+    }
+    closeColorPicker();
+  });
+
+  colorPickerPalette.appendChild(swatch);
+});
+
+colorPickerCloseBtn.addEventListener('click', closeColorPicker);
+colorPickerDialog.addEventListener('cancel', () => {
+  activeColorPicker = null;
+});
+colorPickerDialog.addEventListener('close', () => {
+  activeColorPicker = null;
+});
 
 function isCanvasFullscreen() {
   return document.fullscreenElement === canvasContainer;
@@ -205,14 +287,6 @@ function showCanvasResultPopup(total, values) {
   triggerTotalFlash(total);
 }
 
-function getContrastTextColor(hex) {
-  const r = parseInt(hex.slice(1, 3), 16);
-  const g = parseInt(hex.slice(3, 5), 16);
-  const b = parseInt(hex.slice(5, 7), 16);
-  const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
-  return luminance > 0.62 ? '#111111' : '#f8fafc';
-}
-
 function shuffledColorsForCount(count) {
   const colors = [];
   while (colors.length < count) {
@@ -270,17 +344,6 @@ function renderDiceSelectors() {
   dieColors = shuffledColorsForCount(count);
   diceConfigs.innerHTML = '';
 
-  const colorOptions = useMobileColorInput
-    ? []
-    : COLOR_PALETTE.map((hex) => {
-        const option = document.createElement('option');
-        option.value = hex;
-        option.textContent = ' ';
-        option.style.backgroundColor = hex;
-        option.style.color = getContrastTextColor(hex);
-        return option;
-      });
-
   for (let i = 0; i < count; i++) {
     const wrapper = document.createElement('div');
     wrapper.className = 'die-config';
@@ -301,48 +364,21 @@ function renderDiceSelectors() {
       select.appendChild(o);
     });
 
-    let colorControl;
-    if (useMobileColorInput) {
-      const colorInput = document.createElement('input');
-      colorInput.type = 'color';
-      colorInput.id = `die-color-${i}`;
-      colorInput.dataset.dieColor = 'true';
-      colorInput.className = 'die-color-input';
-      colorInput.value = dieColors[i];
-      colorInput.setAttribute('aria-label', `Die ${i + 1} color`);
+    const colorButton = document.createElement('button');
+    colorButton.type = 'button';
+    colorButton.id = `die-color-${i}`;
+    colorButton.dataset.dieColor = 'true';
+    colorButton.className = 'die-color-trigger';
+    colorButton.setAttribute('aria-label', `Choose color for Die ${i + 1}`);
+    updateColorTriggerButton(colorButton, dieColors[i]);
 
-      colorInput.addEventListener('input', () => {
-        dieColors[i] = colorInput.value;
-        clearDiceFromCanvas();
-      });
-
-      colorControl = colorInput;
-    } else {
-      const colorSelect = document.createElement('select');
-      colorSelect.id = `die-color-${i}`;
-      colorSelect.dataset.dieColor = 'true';
-      colorSelect.className = 'die-color-select';
-      colorOptions.forEach((option) => colorSelect.appendChild(option.cloneNode(true)));
-      colorSelect.value = dieColors[i];
-
-      const applyColorSelectStyle = () => {
-        const selectedHex = colorSelect.value;
-        colorSelect.style.backgroundColor = selectedHex;
-        colorSelect.style.color = getContrastTextColor(selectedHex);
-      };
-
-      colorSelect.addEventListener('change', () => {
-        dieColors[i] = colorSelect.value;
-        applyColorSelectStyle();
-        clearDiceFromCanvas();
-      });
-      applyColorSelectStyle();
-      colorControl = colorSelect;
-    }
+    colorButton.addEventListener('click', () => {
+      openColorPickerFor(i, colorButton);
+    });
 
     const controls = document.createElement('div');
     controls.className = 'die-controls';
-    controls.append(select, colorControl);
+    controls.append(select, colorButton);
 
     wrapper.append(label, controls);
     diceConfigs.appendChild(wrapper);
