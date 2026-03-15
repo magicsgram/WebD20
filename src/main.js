@@ -53,7 +53,7 @@ const RUNTIME_CONFIG = {
     minDice: 1,
     maxDice: 24,
     minScale: 0.7,
-    maxScale: 1.5,
+    maxScale: 1.3,
     baseHalfSize: 6.5,
   },
   flash: {
@@ -76,13 +76,13 @@ const RUNTIME_CONFIG = {
     maxAttempts: 8,
     verticalLift: 1.0,
     upwardImpulseBase: 40.0,
-    upwardImpulseStep: 0.9,
     lateralImpulse: 3.5,
     torqueImpulse: 4.8,
     tiltMinDeg: 15,
     tiltMaxDeg: 30,
   },
   physics: {
+    dt: 1 / 60,
     dice: {
       linearDamping: 0.0,
       angularDamping: 0.0,
@@ -105,7 +105,6 @@ const RUNTIME_CONFIG = {
       dropHeightBaseMax: 4.0,
       dropHeightRandomMin: 0.5,
       dropHeightRandomMax: 0.5,
-      dropHeightStep: 0.18,
       boundaryInset: 1.35,
       impulseOffset: 0.5,
       torqueStrength: 20,
@@ -465,6 +464,7 @@ let relandAttempts = 0;
 // ── Physics world builder ────────────────────────────────────────────────────
 function buildPhysicsWorld(halfSize) {
   const w = new RAPIER.World({ x: 0, y: PHYS.world.gravityY, z: 0 });
+  w.integrationParameters.dt = PHYS.dt;
 
   const wallThickness = PHYS.world.wallThickness;
   const wallHalfHeight = PHYS.world.wallHalfHeight;
@@ -526,7 +526,7 @@ function getEvenlySpacedDropPoints(count, trayHalfSize, inset) {
 function spawnDie(physWorld, dieObj, index, trayHalfSize, diceCount, dropPoint) {
   const { x, z } = dropPoint;
   const { base, random } = getLaunchDropHeight(diceCount);
-  const y = base + (Math.random() * random) + (index * PHYS.launch.dropHeightStep);
+  const y = base + (Math.random() * random);
 
   const bodyDesc = RAPIER.RigidBodyDesc.dynamic()
     .setTranslation(x, y, z)
@@ -636,7 +636,7 @@ function inspectDiceLandings() {
 function relaunchInvalidDice(invalidEntries) {
   relandAttempts += 1;
   triggerRelandFlash();
-  const upwardImpulse = RELAND.upwardImpulseBase + ((relandAttempts - 1) * RELAND.upwardImpulseStep);
+  const upwardImpulse = RELAND.upwardImpulseBase;
 
   const relandTargets = invalidEntries.map((entry) => entry.entity);
 
