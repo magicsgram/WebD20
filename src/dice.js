@@ -54,6 +54,14 @@ const FACE_TEXTURE_CACHE = new Map();
 const WORLD_UP = new THREE.Vector3(0, 1, 0);
 const TEMP_ROTATION_QUAT = new THREE.Quaternion();
 const TEMP_ROTATED_NORMAL = new THREE.Vector3();
+const D6_FACE_VALUE_BY_INDEX = [1, 6, 2, 5, 3, 4];
+
+export function getFaceValueForIndex(sides, faceIndex) {
+  if (sides === 6) {
+    return D6_FACE_VALUE_BY_INDEX[faceIndex] ?? 1;
+  }
+  return faceIndex + 1;
+}
 
 // ── Canvas face texture ──────────────────────────────────────────────────────
 function makeNumberTexture(number, bgHex, sides) {
@@ -212,7 +220,7 @@ export function createDie(sides, colorIndex, colorHexOverride) {
   // Per-face materials with numbered canvas textures
   const materials = Array.from({ length: numFaces }, (_, i) =>
     new THREE.MeshToonMaterial({
-      map: getCachedFaceTexture(i + 1, hexColor, sides),
+      map: getCachedFaceTexture(getFaceValueForIndex(sides, i), hexColor, sides),
       color: 0xffffff,
       gradientMap: TOON_GRADIENT,
       emissive: new THREE.Color(hexColor),
@@ -264,7 +272,7 @@ export function disposeDieMesh(mesh) {
  * For d4 the "value" is conventionally the bottom face, but we read top for simplicity.
  */
 export function detectValue(faceNormals, rapierRot) {
-  return detectTopFaceIndex(faceNormals, rapierRot) + 1;
+  return getFaceValueForIndex(faceNormals.length, detectTopFaceIndex(faceNormals, rapierRot));
 }
 
 export function detectTopFace(faceNormals, rapierRot) {

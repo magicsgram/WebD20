@@ -1,5 +1,5 @@
 import RAPIER from '@dimforge/rapier3d';
-import { createDie, detectTopFace, disposeDieMesh } from './dice.js';
+import { createDie, detectTopFace, disposeDieMesh, getFaceValueForIndex } from './dice.js';
 import { initScene } from './scene.js';
 import './style.css';
 
@@ -543,7 +543,7 @@ function inspectDiceLandings() {
   return entities.map((entity) => {
     const rotation = entity.body.rotation();
     const topFace = detectTopFace(entity.faceNormals, rotation);
-    const value = topFace.index + 1;
+    const value = getFaceValueForIndex(entity.sides, topFace.index);
     const translation = entity.body.translation();
     const onSurface = translation.y <= getSurfaceLandingHeight(entity);
     const faceLanded = topFace.alignment >= SIM.faceLandAlignmentMin;
