@@ -54,11 +54,67 @@ const FACE_TEXTURE_CACHE = new Map();
 const WORLD_UP = new THREE.Vector3(0, 1, 0);
 const TEMP_ROTATION_QUAT = new THREE.Quaternion();
 const TEMP_ROTATED_NORMAL = new THREE.Vector3();
-const D6_FACE_VALUE_BY_INDEX = [1, 6, 2, 5, 3, 4];
+const OPPOSITE_SUM_DICE = new Set([6, 8, 12, 20]);
+const oppositeFaceValueBySides = new Map();
+
+function buildOppositeFaceValueMap(faceNormals) {
+  const faceCount = faceNormals.length;
+  const candidates = [];
+
+  for (let i = 0; i < faceCount; i++) {
+    for (let j = i + 1; j < faceCount; j++) {
+      candidates.push({ i, j, dot: faceNormals[i].dot(faceNormals[j]) });
+    }
+  }
+
+  candidates.sort((a, b) => {
+    if (a.dot !== b.dot) return a.dot - b.dot;
+    if (a.i !== b.i) return a.i - b.i;
+    return a.j - b.j;
+  });
+
+  const paired = new Array(faceCount).fill(false);
+  const pairs = [];
+
+  for (const candidate of candidates) {
+    if (paired[candidate.i] || paired[candidate.j]) continue;
+    paired[candidate.i] = true;
+    paired[candidate.j] = true;
+    pairs.push({ a: candidate.i, b: candidate.j });
+  }
+
+  pairs.sort((left, right) => {
+    const lMin = Math.min(left.a, left.b);
+    const rMin = Math.min(right.a, right.b);
+    if (lMin !== rMin) return lMin - rMin;
+    const lMax = Math.max(left.a, left.b);
+    const rMax = Math.max(right.a, right.b);
+    return lMax - rMax;
+  });
+
+  const valueByIndex = new Array(faceCount).fill(1);
+  let low = 1;
+  for (const pair of pairs) {
+    valueByIndex[pair.a] = low;
+    valueByIndex[pair.b] = (faceCount + 1) - low;
+    low++;
+  }
+
+  return valueByIndex;
+}
+
+function getOppositeFaceValueByIndex(sides) {
+  let valueByIndex = oppositeFaceValueBySides.get(sides);
+  if (!valueByIndex) {
+    valueByIndex = buildOppositeFaceValueMap(getOrCreateDieGeometryData(sides).faceNormals);
+    oppositeFaceValueBySides.set(sides, valueByIndex);
+  }
+  return valueByIndex;
+}
 
 export function getFaceValueForIndex(sides, faceIndex) {
-  if (sides === 6) {
-    return D6_FACE_VALUE_BY_INDEX[faceIndex] ?? 1;
+  if (OPPOSITE_SUM_DICE.has(sides)) {
+    return getOppositeFaceValueByIndex(sides)[faceIndex] ?? 1;
   }
   return faceIndex + 1;
 }
