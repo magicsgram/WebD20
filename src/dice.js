@@ -221,8 +221,8 @@ export function createDie(sides, colorIndex, colorHexOverride) {
   );
 
   const mesh = new THREE.Mesh(dieGeometryData.geometry, materials);
-  mesh.castShadow    = false;
-  mesh.receiveShadow = false;
+  mesh.castShadow    = true;
+  mesh.receiveShadow = true;
 
   const outlines = new THREE.LineSegments(
     dieGeometryData.edgesGeometry,

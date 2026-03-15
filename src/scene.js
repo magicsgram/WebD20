@@ -10,7 +10,8 @@ export function initScene(container) {
   const renderer = new THREE.WebGLRenderer({ antialias: true });
   renderer.setSize(w, h);
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-  renderer.shadowMap.enabled    = false;
+  renderer.shadowMap.enabled    = true;
+  renderer.shadowMap.type       = THREE.PCFSoftShadowMap;
   renderer.toneMapping          = THREE.NoToneMapping;
   renderer.toneMappingExposure  = 1.0;
   renderer.outputColorSpace     = THREE.SRGBColorSpace;
@@ -22,10 +23,11 @@ export function initScene(container) {
   const scene = new THREE.Scene();
   scene.background = new THREE.Color(0x000000);
 
-  const trayMaterial = new THREE.MeshStandardMaterial({ color: 0x171717, roughness: 0.94, metalness: 0.04 });
+  const trayMaterial = new THREE.MeshStandardMaterial({ color: 0x555555, roughness: 0.94, metalness: 0.04 });
   const trayMesh = new THREE.Mesh(new THREE.CircleGeometry(1, 96), trayMaterial);
   trayMesh.rotation.x = -Math.PI / 2;
   trayMesh.position.y = 0.001;
+  trayMesh.receiveShadow = true;
   scene.add(trayMesh);
 
   const d6Height = 0.68 * 1.72;
@@ -41,6 +43,12 @@ export function initScene(container) {
   wallInnerRing.position.y = visibleWallHeight * 0.5;
   wallTopRim.rotation.x = Math.PI / 2;
   wallTopRim.position.y = visibleWallHeight;
+  wallOuterRing.castShadow = true;
+  wallOuterRing.receiveShadow = true;
+  wallInnerRing.castShadow = true;
+  wallInnerRing.receiveShadow = true;
+  wallTopRim.castShadow = true;
+  wallTopRim.receiveShadow = true;
   scene.add(wallOuterRing, wallInnerRing, wallTopRim);
 
   // ── Camera ───────────────────────────────────────────────────────────────────
@@ -131,15 +139,37 @@ export function initScene(container) {
   updateWallMeshes();
 
   // ── Lights ────────────────────────────────────────────────────────────────────
-  scene.add(new THREE.AmbientLight(0xffffff, 1.0));
+  scene.add(new THREE.AmbientLight(0xffffff, 0.68));
 
   const key = new THREE.DirectionalLight(0xffffff, 0.35);
   key.position.set(5, 11, 6);
+  key.castShadow = true;
+  key.shadow.mapSize.set(1024, 1024);
+  key.shadow.bias = -0.00008;
+  key.shadow.normalBias = 0.02;
+  key.shadow.camera.near = 0.5;
+  key.shadow.camera.far = 60;
+  key.shadow.camera.left = -12;
+  key.shadow.camera.right = 12;
+  key.shadow.camera.top = 12;
+  key.shadow.camera.bottom = -12;
   scene.add(key);
 
-  const fill = new THREE.DirectionalLight(0x88aaff, 0.08);
+  const fill = new THREE.DirectionalLight(0x88aaff, 0.04);
   fill.position.set(-5, 8, -4);
   scene.add(fill);
+
+  function updateShadowFrustum() {
+    const shadowRadius = Math.max(8, trayHalfSize * 1.35);
+    key.shadow.camera.left = -shadowRadius;
+    key.shadow.camera.right = shadowRadius;
+    key.shadow.camera.top = shadowRadius;
+    key.shadow.camera.bottom = -shadowRadius;
+    key.shadow.camera.far = Math.max(50, visibleWallHeight + (trayHalfSize * 3));
+    key.shadow.camera.updateProjectionMatrix();
+  }
+
+  updateShadowFrustum();
 
   function resizeScene() {
     const nextRect = container.getBoundingClientRect();
@@ -153,6 +183,7 @@ export function initScene(container) {
     trayHalfSize = Math.max(2, Number(nextHalfSize) || 6.5);
     updateTrayMeshSize();
     updateWallMeshes();
+    updateShadowFrustum();
     resizeScene();
   }
 
