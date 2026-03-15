@@ -49,7 +49,7 @@ const RUNTIME_CONFIG = {
   trayScale: {
     minDice: 1,
     maxDice: 24,
-    minScale: 0.5,
+    minScale: 0.7,
     maxScale: 1.5,
     baseHalfSize: 6.5,
   },
@@ -60,7 +60,7 @@ const RUNTIME_CONFIG = {
   simulation: {
     maxSteps: 450,
     minStableFrames: 24,
-    minRollSteps: 70,
+    minRollSteps: 40,
     linearStopSpeed: 0.08,
     angularStopSpeed: 0.18,
     verticalStopSpeed: 0.07,
@@ -83,27 +83,30 @@ const RUNTIME_CONFIG = {
     dice: {
       linearDamping: 0.0,
       angularDamping: 0.0,
-      friction: 0.18,
-      restitution: 0.14,
+      friction: 0.005,
+      restitution: 0.5,
       density: 2.1,
     },
     world: {
-      gravityY: -12.0,
+      gravityY: -11.0,
       wallThickness: 0.5,
-      wallHalfHeight: 60,
-      wallRestitution: 0.34,
-      wallFriction: 0.10,
-      floorRestitution: 0.12,
-      floorFriction: 0.54,
+      wallHalfHeight: 300,
+      wallRestitution: 0.7,
+      wallFriction: 0.00,
+      floorRestitution: 0.5,
+      floorFriction: 0.5,
       wallSegments: 64,
     },
     launch: {
-      dropHeightBase: 6.0,
-      dropHeightRandom: 1.2,
+      dropHeightBaseMin: 4.0,
+      dropHeightBaseMax: 6.0,
+      dropHeightRandomMin: 0.1,
+      dropHeightRandomMax: 0.1,
       dropHeightStep: 0.18,
       boundaryInset: 1.35,
-      impulseOffset: 1,
-      torqueStrength: 10,
+      impulseOffset: 0.5,
+      torqueStrength: 8,
+      centerImpulseStrength: 4,
     },
   },
 };
@@ -431,10 +434,20 @@ function buildPhysicsWorld(halfSize) {
 }
 
 // ── Spawn a die into the physics world ───────────────────────────────────────
+function getLaunchDropHeight(diceCount) {
+  const t = (Math.max(TRAY_SCALE.minDice, diceCount) - TRAY_SCALE.minDice)
+    / Math.max(1, TRAY_SCALE.maxDice - TRAY_SCALE.minDice);
+  return {
+    base: PHYS.launch.dropHeightBaseMin + (PHYS.launch.dropHeightBaseMax - PHYS.launch.dropHeightBaseMin) * t,
+    random: PHYS.launch.dropHeightRandomMin + (PHYS.launch.dropHeightRandomMax - PHYS.launch.dropHeightRandomMin) * t,
+  };
+}
+
 function getRandomDropPoint(trayHalfSize, inset) {
-  const usableRadius = Math.max(0.75, trayHalfSize - inset);
+  const boundaryRadius = Math.max(0.75, trayHalfSize - inset);
   const angle = Math.random() * Math.PI * 2;
-  const radius = Math.sqrt(Math.random()) * usableRadius;
+  // Spawn near the outer boundary ring (80–100% of the safe radius)
+  const radius = boundaryRadius * (0.80 + Math.random() * 0.20);
 
   return {
     x: Math.cos(angle) * radius,
@@ -442,12 +455,13 @@ function getRandomDropPoint(trayHalfSize, inset) {
   };
 }
 
-function spawnDie(physWorld, dieObj, index, trayHalfSize) {
+function spawnDie(physWorld, dieObj, index, trayHalfSize, diceCount) {
   const { x, z } = getRandomDropPoint(
     trayHalfSize,
     PHYS.launch.boundaryInset + (dieObj.physRadius * 0.9)
   );
-  const y = PHYS.launch.dropHeightBase + (Math.random() * PHYS.launch.dropHeightRandom) + (index * PHYS.launch.dropHeightStep);
+  const { base, random } = getLaunchDropHeight(diceCount);
+  const y = base + (Math.random() * random) + (index * PHYS.launch.dropHeightStep);
 
   const bodyDesc = RAPIER.RigidBodyDesc.dynamic()
     .setTranslation(x, y, z)
@@ -486,6 +500,13 @@ function spawnDie(physWorld, dieObj, index, trayHalfSize) {
   const launchImpulseOffset = PHYS.launch.impulseOffset;
   const launchTorqueStrength = PHYS.launch.torqueStrength;
   body.applyTorqueImpulse(getRandomTorqueImpulse(launchTorqueStrength, launchImpulseOffset), true);
+
+  // Launch towards center — impulse magnitude scales with spawn distance
+  const dist = Math.hypot(x, z);
+  if (dist > 1e-4) {
+    const cs = PHYS.launch.centerImpulseStrength;
+    body.applyImpulse({ x: (-x / dist) * cs * dist, y: 0, z: (-z / dist) * cs * dist }, true);
+  }
 
   return body;
 }
@@ -623,7 +644,7 @@ function startRoll() {
 
   selectedDice.forEach((sides, i) => {
     const dieObj = createDie(sides, i, dieColors[i]);
-    const body   = spawnDie(world, dieObj, i, trayHalfSize);
+    const body   = spawnDie(world, dieObj, i, trayHalfSize, selectedDice.length);
     scene.add(dieObj.mesh);
     entities.push({ body, mesh: dieObj.mesh, faceNormals: dieObj.faceNormals, sides, physRadius: dieObj.physRadius });
   });
