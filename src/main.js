@@ -132,6 +132,7 @@ let dieColors = [];
 let popupTimer = null;
 let rollInputLocked = false;
 let relandFlashTimer = null;
+const useMobileColorInput = window.matchMedia('(pointer: coarse)').matches;
 
 function isCanvasFullscreen() {
   return document.fullscreenElement === canvasContainer;
@@ -269,14 +270,16 @@ function renderDiceSelectors() {
   dieColors = shuffledColorsForCount(count);
   diceConfigs.innerHTML = '';
 
-  const colorOptions = COLOR_PALETTE.map((hex) => {
-    const option = document.createElement('option');
-    option.value = hex;
-    option.textContent = hex.toUpperCase();
-    option.style.backgroundColor = hex;
-    option.style.color = getContrastTextColor(hex);
-    return option;
-  });
+  const colorOptions = useMobileColorInput
+    ? []
+    : COLOR_PALETTE.map((hex) => {
+        const option = document.createElement('option');
+        option.value = hex;
+        option.textContent = ' ';
+        option.style.backgroundColor = hex;
+        option.style.color = getContrastTextColor(hex);
+        return option;
+      });
 
   for (let i = 0; i < count; i++) {
     const wrapper = document.createElement('div');
@@ -298,29 +301,48 @@ function renderDiceSelectors() {
       select.appendChild(o);
     });
 
-    const colorSelect = document.createElement('select');
-    colorSelect.id = `die-color-${i}`;
-    colorSelect.dataset.dieColor = 'true';
-    colorSelect.className = 'die-color-select';
-    colorOptions.forEach((option) => colorSelect.appendChild(option.cloneNode(true)));
-    colorSelect.value = dieColors[i];
+    let colorControl;
+    if (useMobileColorInput) {
+      const colorInput = document.createElement('input');
+      colorInput.type = 'color';
+      colorInput.id = `die-color-${i}`;
+      colorInput.dataset.dieColor = 'true';
+      colorInput.className = 'die-color-input';
+      colorInput.value = dieColors[i];
+      colorInput.setAttribute('aria-label', `Die ${i + 1} color`);
 
-    const applyColorSelectStyle = () => {
-      const selectedHex = colorSelect.value;
-      colorSelect.style.backgroundColor = selectedHex;
-      colorSelect.style.color = getContrastTextColor(selectedHex);
-    };
+      colorInput.addEventListener('input', () => {
+        dieColors[i] = colorInput.value;
+        clearDiceFromCanvas();
+      });
 
-    colorSelect.addEventListener('change', () => {
-      dieColors[i] = colorSelect.value;
+      colorControl = colorInput;
+    } else {
+      const colorSelect = document.createElement('select');
+      colorSelect.id = `die-color-${i}`;
+      colorSelect.dataset.dieColor = 'true';
+      colorSelect.className = 'die-color-select';
+      colorOptions.forEach((option) => colorSelect.appendChild(option.cloneNode(true)));
+      colorSelect.value = dieColors[i];
+
+      const applyColorSelectStyle = () => {
+        const selectedHex = colorSelect.value;
+        colorSelect.style.backgroundColor = selectedHex;
+        colorSelect.style.color = getContrastTextColor(selectedHex);
+      };
+
+      colorSelect.addEventListener('change', () => {
+        dieColors[i] = colorSelect.value;
+        applyColorSelectStyle();
+        clearDiceFromCanvas();
+      });
       applyColorSelectStyle();
-      clearDiceFromCanvas();
-    });
-    applyColorSelectStyle();
+      colorControl = colorSelect;
+    }
 
     const controls = document.createElement('div');
     controls.className = 'die-controls';
-    controls.append(select, colorSelect);
+    controls.append(select, colorControl);
 
     wrapper.append(label, controls);
     diceConfigs.appendChild(wrapper);

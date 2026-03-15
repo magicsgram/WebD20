@@ -315,6 +315,31 @@ select:focus {
   margin-bottom: 0;
 }
 
+.die-config .die-color-input {
+  width: 100%;
+  margin-bottom: 0;
+  min-height: 1.85rem;
+  padding: 0;
+  border-radius: 7px;
+  border: 1px solid #2d4a32;
+  background: #0a160c;
+  cursor: pointer;
+}
+
+.die-config .die-color-input::-webkit-color-swatch-wrapper {
+  padding: 0;
+}
+
+.die-config .die-color-input::-webkit-color-swatch {
+  border: 0;
+  border-radius: 6px;
+}
+
+.die-config .die-color-input::-moz-color-swatch {
+  border: 0;
+  border-radius: 6px;
+}
+
 /* ── Results ─────────────────────────────────────────────────────────────── */
 .results-panel {
   display: none;
@@ -352,5 +377,9 @@ select:focus {
 
   .side-panel {
     -webkit-overflow-scrolling: touch;
+  }
+
+  .die-config .die-color-input {
+    min-height: 2rem;
   }
 }
