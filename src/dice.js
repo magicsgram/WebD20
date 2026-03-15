@@ -52,6 +52,7 @@ const TOON_GRADIENT = (() => {
 const DIE_GEOMETRY_CACHE = new Map();
 const FACE_TEXTURE_CACHE = new Map();
 const WORLD_UP = new THREE.Vector3(0, 1, 0);
+const WORLD_RIGHT = new THREE.Vector3(1, 0, 0);
 const TEMP_ROTATION_QUAT = new THREE.Quaternion();
 const TEMP_ROTATED_NORMAL = new THREE.Vector3();
 const OPPOSITE_SUM_DICE = new Set([6, 8, 12, 20]);
@@ -119,6 +120,21 @@ export function getFaceValueForIndex(sides, faceIndex) {
   return faceIndex + 1;
 }
 
+function drawCenteredNumber(ctx, text, centerX, centerY) {
+  const metrics = ctx.measureText(text);
+  const left = metrics.actualBoundingBoxLeft ?? (metrics.width * 0.5);
+  const right = metrics.actualBoundingBoxRight ?? (metrics.width * 0.5);
+  const ascent = metrics.actualBoundingBoxAscent ?? 0;
+  const descent = metrics.actualBoundingBoxDescent ?? 0;
+
+  // Convert requested visual center into the correct baseline origin.
+  const drawX = centerX + ((left - right) * 0.5);
+  const drawY = centerY + ((ascent - descent) * 0.5);
+  ctx.fillText(text, drawX, drawY);
+
+  return { drawX, drawY, left, right, ascent, descent };
+}
+
 // ── Canvas face texture ──────────────────────────────────────────────────────
 function makeNumberTexture(number, bgHex, sides) {
   const S = 256;
@@ -136,17 +152,22 @@ function makeNumberTexture(number, bgHex, sides) {
     ? (number >= 10 ? 46 : 56)
     : (number >= 10 ? 90 : 140);
   ctx.font = `bold ${fontSize}px Arial, sans-serif`;
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'alphabetic';
   const textX = sides === 20 ? S * D20_TEXT_UV.x : S / 2;
   const textY = sides === 20 ? S * D20_TEXT_UV.y : S / 2;
   ctx.fillStyle = '#0a0a0a';
-  ctx.fillText(String(number), textX, textY);
+  const text = String(number);
+  const glyph = drawCenteredNumber(ctx, text, textX, textY);
 
-  if (number === 6 || number === 9) {
+  if (sides >= 9 && (number === 6 || number === 9)) {
     const dotRadius = sides === 20 ? 6 : 10;
-    const dotX = sides === 20 ? textX + 18 : S * 0.80;
-    const dotY = sides === 20 ? textY + 17 : S * 0.82;
+    const dotPadX = sides === 20 ? 4 : 5;
+    const dotPadY = sides === 20 ? 4 : 5;
+    const rightEdge = glyph.drawX + glyph.right;
+    const bottomEdge = glyph.drawY + glyph.descent;
+    const dotX = Math.min(S - dotRadius - 6, rightEdge + dotPadX);
+    const dotY = Math.min(S - dotRadius - 6, bottomEdge + dotPadY);
     ctx.fillStyle = '#0a0a0a';
     ctx.beginPath();
     ctx.arc(dotX, dotY, dotRadius, 0, Math.PI * 2);
@@ -190,6 +211,67 @@ function applyTriFaceUVs(geometry, numFaces, trisPerFace) {
     uv.setXY(base + 1, D20_UV_LEFT.x, D20_UV_LEFT.y);
     uv.setXY(base + 2, D20_UV_RIGHT.x, D20_UV_RIGHT.y);
   }
+  uv.needsUpdate = true;
+}
+
+function applyPlanarFaceUVs(geometry, numFaces, trisPerFace) {
+  if (!geometry.attributes.uv || trisPerFace < 1) return;
+
+  const pos = geometry.attributes.position;
+  const uv = geometry.attributes.uv;
+  const vpf = trisPerFace * 3;
+
+  const a = new THREE.Vector3();
+  const b = new THREE.Vector3();
+  const c = new THREE.Vector3();
+  const faceNormal = new THREE.Vector3();
+  const tangent = new THREE.Vector3();
+  const bitangent = new THREE.Vector3();
+  const p = new THREE.Vector3();
+
+  for (let f = 0; f < numFaces; f++) {
+    const faceBase = f * vpf;
+
+    a.fromBufferAttribute(pos, faceBase);
+    b.fromBufferAttribute(pos, faceBase + 1);
+    c.fromBufferAttribute(pos, faceBase + 2);
+
+    faceNormal
+      .crossVectors(b.clone().sub(a), c.clone().sub(a))
+      .normalize();
+
+    const ref = Math.abs(faceNormal.dot(WORLD_UP)) > 0.92 ? WORLD_RIGHT : WORLD_UP;
+    tangent.crossVectors(ref, faceNormal).normalize();
+    bitangent.crossVectors(faceNormal, tangent).normalize();
+
+    let minU = Infinity;
+    let maxU = -Infinity;
+    let minV = Infinity;
+    let maxV = -Infinity;
+
+    for (let i = 0; i < vpf; i++) {
+      p.fromBufferAttribute(pos, faceBase + i);
+      const u = p.dot(tangent);
+      const v = p.dot(bitangent);
+      if (u < minU) minU = u;
+      if (u > maxU) maxU = u;
+      if (v < minV) minV = v;
+      if (v > maxV) maxV = v;
+    }
+
+    const rangeU = Math.max(1e-6, maxU - minU);
+    const rangeV = Math.max(1e-6, maxV - minV);
+
+    for (let i = 0; i < vpf; i++) {
+      p.fromBufferAttribute(pos, faceBase + i);
+      const u = p.dot(tangent);
+      const v = p.dot(bitangent);
+      const normalizedU = (u - minU) / rangeU;
+      const normalizedV = (v - minV) / rangeV;
+      uv.setXY(faceBase + i, normalizedU, normalizedV);
+    }
+  }
+
   uv.needsUpdate = true;
 }
 
@@ -239,6 +321,10 @@ function getOrCreateDieGeometryData(sides) {
 
   if (geometry.groups.length === 0) {
     addFaceGroups(geometry, numFaces, trisPerFace);
+  }
+
+  if (sides === 12) {
+    applyPlanarFaceUVs(geometry, numFaces, trisPerFace);
   }
 
   if (sides === 20) {

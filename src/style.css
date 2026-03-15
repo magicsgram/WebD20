@@ -251,7 +251,7 @@ select:focus {
 
 .count-row {
   display: grid;
-  grid-template-columns: minmax(70px, 90px) 1fr 1fr;
+  grid-template-columns: minmax(58px, 78px) repeat(3, minmax(0, 1fr));
   gap: 0.45rem;
   align-items: center;
   margin-bottom: 0.8rem;
@@ -269,8 +269,14 @@ select:focus {
   padding: 0.45rem 0.5rem;
   font-size: 0.82rem;
   font-weight: 600;
+  white-space: nowrap;
   cursor: pointer;
   transition: border-color 0.12s ease, background-color 0.12s ease;
+}
+
+#set-all-d12 {
+  font-size: 0.76rem;
+  padding: 0.42rem 0.38rem;
 }
 
 .quick-btn:hover {

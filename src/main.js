@@ -7,6 +7,7 @@ import './style.css';
 const diceCountSelect = document.querySelector('#dice-count');
 const diceConfigs     = document.querySelector('#dice-configs');
 const setAllD6Btn     = document.querySelector('#set-all-d6');
+const setAllD12Btn    = document.querySelector('#set-all-d12');
 const setAllD20Btn    = document.querySelector('#set-all-d20');
 const canvasContainer = document.querySelector('#canvas-container');
 const sidePanel       = document.querySelector('.side-panel');
@@ -50,7 +51,7 @@ const RUNTIME_CONFIG = {
   trayScale: {
     minDice: 1,
     maxDice: 24,
-    minScale: 0.8,
+    minScale: 0.7,
     maxScale: 1.5,
     baseHalfSize: 6.5,
   },
@@ -106,12 +107,12 @@ const RUNTIME_CONFIG = {
       dropHeightStep: 0.18,
       boundaryInset: 1.35,
       impulseOffset: 0.5,
-      torqueStrength: 8,
-      centerImpulseStrength: 4,
-      upwardImpulseBase: 6,
+      torqueStrength: 20,
+      centerImpulseStrength: 3,
+      upwardImpulseBase: 8,
       upwardImpulseJitter: 0.35,
-      upwardVelocityBase: 5.0,
-      upwardVelocityJitter: 0.5,
+      upwardVelocityBase: 4.5,
+      upwardVelocityJitter: 0.05,
     },
   },
 };
@@ -297,7 +298,7 @@ function getTrayHalfSizeForDiceCount(count) {
   return TRAY_SCALE.baseHalfSize * getTrayScaleForDiceCount(count);
 }
 
-function getRandomTorqueImpulse(baseStrength, strengthJitter = 0) {
+function getRandomAngularVelocity(baseSpeed, speedJitter = 0) {
   let x = (Math.random() * 2) - 1;
   let y = (Math.random() * 2) - 1;
   let z = (Math.random() * 2) - 1;
@@ -310,11 +311,11 @@ function getRandomTorqueImpulse(baseStrength, strengthJitter = 0) {
     length = 1;
   }
 
-  const strength = Math.max(0.1, baseStrength + ((Math.random() * 2) - 1) * strengthJitter);
+  const speed = Math.max(0.1, baseSpeed + ((Math.random() * 2) - 1) * speedJitter);
   return {
-    x: (x / length) * strength,
-    y: (y / length) * strength,
-    z: (z / length) * strength,
+    x: (x / length) * speed,
+    y: (y / length) * speed,
+    z: (z / length) * speed,
   };
 }
 
@@ -344,9 +345,9 @@ function renderDiceSelectors() {
     select.dataset.dieType = 'true';
     select.className = 'die-type-select';
 
-    [6, 20].forEach(faces => {
+    [6, 12, 20].forEach(faces => {
       const o = document.createElement('option');
-      o.value = String(faces); o.textContent = `d${faces}`;
+      o.value = String(faces); o.textContent = `D${faces}`;
       if (faces === 6) o.selected = true;
       select.appendChild(o);
     });
@@ -381,6 +382,10 @@ function setAllDiceTypes(value) {
 
 setAllD6Btn.addEventListener('click', () => {
   setAllDiceTypes(6);
+  clearDiceFromCanvas();
+});
+setAllD12Btn.addEventListener('click', () => {
+  setAllDiceTypes(12);
   clearDiceFromCanvas();
 });
 setAllD20Btn.addEventListener('click', () => {
@@ -539,18 +544,16 @@ function spawnDie(physWorld, dieObj, index, trayHalfSize, diceCount, dropPoint) 
       RAPIER.ColliderDesc.convexHull(dieObj.physHullPositions) ??
       RAPIER.ColliderDesc.ball(dieObj.physRadius * 0.88);
   }
-  const dieDensity = dieObj.sides === 20
-    ? PHYS.dice.density * 0.78
-    : PHYS.dice.density;
   colliderDesc
     .setRestitution(PHYS.dice.restitution)
     .setFriction(PHYS.dice.friction)
-    .setDensity(dieDensity);
+    .setDensity(PHYS.dice.density);
   physWorld.createCollider(colliderDesc, body);
 
-  const launchImpulseOffset = PHYS.launch.impulseOffset;
-  const launchTorqueStrength = PHYS.launch.torqueStrength;
-  body.applyTorqueImpulse(getRandomTorqueImpulse(launchTorqueStrength, launchImpulseOffset), true);
+  // Directly setting angular velocity keeps initial spin feel consistent across die shapes.
+  const launchAngularSpeedJitter = PHYS.launch.impulseOffset;
+  const launchAngularSpeed = PHYS.launch.torqueStrength;
+  body.setAngvel(getRandomAngularVelocity(launchAngularSpeed, launchAngularSpeedJitter), true);
 
   // Velocity kick is mass-independent, so upward launch is always visible.
   const upwardVelocity = Math.max(
@@ -650,7 +653,7 @@ function relaunchInvalidDice(invalidEntries) {
       y: upwardImpulse,
       z: Math.sin(heading) * lateralImpulse,
     }, true);
-    body.applyTorqueImpulse(getRandomTorqueImpulse(RELAND.torqueImpulse), true);
+    body.setAngvel(getRandomAngularVelocity(RELAND.torqueImpulse), true);
   });
 
   stepCount = 0;
