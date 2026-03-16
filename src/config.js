@@ -45,13 +45,13 @@ export const RUNTIME_CONFIG = {
     },
     userReroll: {
       verticalLift: 0.0,
-      upwardImpulseBase: 40.0,
+      upwardImpulseBase: 30.0,
       upwardImpulseJitterScale: 0.25,
       lateralImpulse: 20,
-      torqueImpulse: 20.8,
+      torqueImpulse: 25,
       torqueImpulseJitterScale: 0.25,
-      tiltMinDeg: 15,
-      tiltMaxDeg: 30,
+      tiltMinDeg: 5,
+      tiltMaxDeg: 10,
     },
   },
   physics: {
