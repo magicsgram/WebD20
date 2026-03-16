@@ -69,6 +69,14 @@ function resetRollHighlights(entity) {
   });
 }
 
+function getHeadingTowardTrayCenter(entity, translation) {
+  if (Math.hypot(translation.x, translation.z) <= 1e-4) {
+    return 0;
+  }
+
+  return Math.atan2(-translation.z, -translation.x);
+}
+
 setRollButtonState(false);
 
 // ── Simulation state ─────────────────────────────────────────────────────────
@@ -126,6 +134,7 @@ function relaunchStabilizedDice({ showFlash = false } = {}) {
 
   relaunchDiceEntities(entities, USER_REROLL, {
     resetHighlights: true,
+    getHeading: getHeadingTowardTrayCenter,
     onResetHighlights: resetRollHighlights,
   });
 
@@ -142,6 +151,7 @@ function relaunchRollingDice() {
     applyVerticalLift: false,
     applyUpwardImpulse: true,
     shouldApplyUpwardImpulse: (entity, translation) => translation.y <= (entity.physRadius * 2),
+    getHeading: getHeadingTowardTrayCenter,
     onResetHighlights: resetRollHighlights,
   });
 

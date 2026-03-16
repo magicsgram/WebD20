@@ -164,12 +164,15 @@ export function relaunchDiceEntities(relaunchTargets, relaunchConfig, {
   applyVerticalLift = true,
   applyUpwardImpulse = true,
   shouldApplyUpwardImpulse = null,
+  getHeading = null,
   onResetHighlights = null,
 } = {}) {
   relaunchTargets.forEach((entity) => {
     const translation = entity.body.translation();
     const lift = applyVerticalLift ? Math.max(relaunchConfig.verticalLift, entity.physRadius * 0.45) : 0;
-    const heading = Math.random() * Math.PI * 2;
+    const heading = typeof getHeading === 'function'
+      ? getHeading(entity, translation)
+      : Math.random() * Math.PI * 2;
     const tiltDeg = relaunchConfig.tiltMinDeg + (Math.random() * (relaunchConfig.tiltMaxDeg - relaunchConfig.tiltMinDeg));
     const tiltRad = (tiltDeg * Math.PI) / 180;
     const upwardImpulse = relaunchConfig.upwardImpulseBase * (
